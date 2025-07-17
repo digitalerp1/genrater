@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-App Marksheet & Data Tool</title>
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- html2pdf.js is removed as App2 will use jsPDF like App1 -->
+
+    <style>
+        /* Global Styles & Resets */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0; /* Nav will handle padding */
+            background-color: #eef1f5;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* App Navigation */
+        #appNavbar {
+            background-color: #0056b3;
+            padding: 10px 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 1000; /* Keep nav visible */
+        }
+        #appNavbar button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        #appNavbar button:hover {
+            background-color: #005ec9;
+            transform: translateY(-1px);
+        }
+        #appNavbar button.active-app-btn {
+            background-color: #004a8c;
+            font-weight: bold;
+        }
+
+        /* App Content Wrapper */
+        .app-page-container {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Common Container Style for each app's main box */
+        .container {
+            background-color: #fff;
+            padding: 25px 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 950px; /* Default max-width, can be overridden by specific app styles */
+            margin-bottom: 20px;
+        }
+        #app3 .container { /* Specific max-width for App 3 */
+             max-width: 700px;
+        }
+
+
+        /* Common Headings, Labels, Inputs, Buttons */
+        h2, h3 {
+            color: #0056b3;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        h3 { font-size: 1.3em; color: #0067a0; border-bottom-width: 1px; }
+
+        label { display: block; margin-bottom: 8px; font-weight: 600; color: #444; }
+
+        input[type="text"], input[type="number"], input[type="date"],
+        input[type="file"], input[type="email"], input[type="tel"], input[type="url"], select {
+            width: calc(100% - 24px); padding: 12px; margin-bottom: 18px;
+            border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box;
+            transition: border-color 0.3s, box-shadow 0.3s; font-size: 1rem;
+        }
+        input[type="text"]:focus, input[type="number"]:focus, input[type="date"]:focus,
+        input[type="email"]:focus, input[type="tel"]:focus, input[type="url"]:focus, select:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+            outline: none;
+        }
+        #app3 input[type="file"], #app3 select { /* App 3 specific input/select styling */
+            padding: 10px;
+            margin-bottom: 16px;
+            border: 1px solid #cbd5e0;
+            font-size: 0.95rem;
+        }
+        #app3 input[type="file"] { padding: 8px; }
+
+
+        button { /* Generic button style */
+            background-color: #007bff; color: white; padding: 12px 22px;
+            border: none; border-radius: 6px; cursor: pointer; font-size: 1rem;
+            font-weight: 500; transition: background-color 0.3s, transform 0.1s;
+            margin-right: 10px; margin-top: 10px;
+        }
+        button:hover { background-color: #0056b3; transform: translateY(-1px); }
+        button:active { transform: translateY(0px); }
+        button:disabled { background-color: #ccc; cursor: not-allowed; transform: none; }
+        
+        button.secondary { background-color: #6c757d; }
+        button.secondary:hover { background-color: #545b62; }
+        button.danger { background-color: #dc3545; }
+        button.danger:hover { background-color: #b02a37; }
+        
+        #app3 button { /* App3 specific button styling */
+            background-color: #3182ce;
+            display: block;
+            width: 100%;
+        }
+        #app3 button:hover { background-color: #2b6cb0; }
+        #app3 button:disabled { background-color: #a0aec0; }
+
+
+        /* Global Loading Overlay */
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 10000;
+            display: none; justify-content: center; align-items: center;
+            color: white; font-size: 1.5em; text-align: center;
+        }
+
+        /* Common utility classes */
+        .hidden { display: none !important; }
+
+
+        /* --- STYLES FOR APP 1: JSON Marksheet Generator --- */
+        #app1 .container { max-width: 900px; }
+        #app1 #logoPreview { max-height: 80px; margin-top: 5px; border: 1px solid #ddd; padding:5px; border-radius:4px; display:none; }
+        
+        /* Common styles for App1 and App2 image/marksheet display */
+        .all-marksheets-display-container { /* Renamed for common use */
+            margin-top: 20px; border: 1px solid #dee2e6; padding: 15px;
+            max-height: 600px; overflow-y: auto; background-color: #f8f9fa;
+        }
+        .image-preview-container-wrapper { /* Renamed for common use */
+            margin-top:20px; border: 1px solid #c3e6cb; padding:15px; background-color: #d4edda;
+        }
+        .image-preview-container img { /* Renamed for common use */
+            max-width: 200px; margin: 5px; border: 1px solid #aaa;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+
+        /* App1 specific marksheet rendering styles */
+        #app1 .marksheet-render-wrapper { 
+            width: 210mm; min-height: 290mm; /* A4 approx */
+            box-sizing: border-box; padding: 10mm; background-color: white;
+            margin-bottom: 10px; border: 1px solid #ccc; overflow: hidden;
+        }
+        #app1 .marksheet { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px;}
+        #app1 .marksheet th, #app1 .marksheet td { border: 1px solid #444; padding: 6px; text-align: left; }
+        #app1 .marksheet th { background-color: #e9ecef; font-weight: 600; color: #333; }
+        #app1 .marksheet-header { text-align: center; margin-bottom: 15px; }
+        #app1 .marksheet-header img { max-height: 60px; margin-bottom: 8px; }
+        #app1 .marksheet-header h1 { margin: 0 0 2px 0; font-size: 1.6em; color: #004a8c; }
+        #app1 .marksheet-header h2 { margin: 2px 0; font-size: 1.2em; color: #333; font-weight: 600; border-bottom: none; }
+        #app1 .marksheet-header h3 { margin: 2px 0 10px 0; font-size: 1em; color: #555; font-weight: normal; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: none;}
+        #app1 .marksheet-header p { font-size: 0.8em; margin-bottom:8px; color: #555; }
+        #app1 .student-info-section { display: flex; flex-wrap: wrap; justify-content: space-between; margin-bottom: 10px; font-size: 0.8rem; }
+        #app1 .student-info-col { flex: 0 0 49%; }
+        #app1 .student-info-table { width: 100%; }
+        #app1 .student-info-table td{ border: none; padding: 3px 0; }
+        #app1 .student-info-table td:first-child { font-weight: 600; width: 110px; color: #444; }
+        #app1 .qr-code-container { float: right; margin: 0 0 8px 8px; width:70px; height:70px; }
+        #app1 .qr-code-container canvas, #app1 .qr-code-container img { width: 100% !important; height: 100% !important; }
+        #app1 .marksheet-footer { margin-top: 25px; display:flex; justify-content: space-between; font-size: 0.85em; padding-top: 10px; border-top: 1px dashed #ccc; }
+
+
+        /* --- STYLES FOR APP 2: Enhanced Marksheet Generator --- */
+        #app2 .screen { display: none; } /* App2's internal screen management */
+        #app2 .screen.active { display: block; }
+        #app2 .subject-item, #app2 .student-marks-item, #app2 .column-mapping-item {
+            display: flex; align-items: center; gap: 15px; padding: 12px;
+            border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 12px;
+            background-color: #f9f9f9;
+        }
+        #app2 .subject-item input, #app2 .column-mapping-item select { margin-bottom: 0; }
+        #app2 .column-mapping-item label { flex-basis: 200px; margin-bottom: 0; font-weight: normal; }
+        #app2 .column-mapping-item select { flex-grow: 1; }
+
+        #app2 #studentListContainer /*, #app2 #studentListForPreviewContainer (Removed) */ {
+            max-height: 300px; overflow-y: auto; border: 1px solid #ddd;
+            padding: 10px; border-radius: 6px; background-color: #fdfdfd;
+        }
+        #app2 .student-list-item {
+            padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee;
+            transition: background-color 0.2s; font-size: 0.95rem;
+        }
+        #app2 .student-list-item:hover, #app2 .student-list-item.selected {
+            background-color: #e0efff; color: #0056b3; font-weight: 500;
+        }
+        #app2 .student-list-item:last-child { border-bottom: none; }
+
+        #app2 #reviewStudentDataTableContainer { max-height: 500px; overflow: auto; margin-bottom: 15px; }
+        #app2 .review-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        #app2 .review-table th, #app2 .review-table td {
+            border: 1px solid #ddd; padding: 6px 8px; text-align: left;
+            white-space: nowrap;
+        }
+        #app2 .review-table th { background-color: #f0f0f0; position: sticky; top: 0; z-index:1; }
+        #app2 .review-table input[type="text"] { /* Scoped for review table */
+            width: calc(100% - 10px); padding: 4px; font-size: 0.85rem;
+            margin-bottom: 0; border-radius:3px;
+        }
+        #app2 .review-table td:nth-child(1), #app2 .review-table td:nth-child(2), #app2 .review-table td:nth-child(3) {
+            min-width: 100px;
+        }
+
+        /* App2 specific marksheet styling for html2canvas capture */
+        #app2 .app2-marksheet-render-wrapper {
+            width: 210mm; /* A4 width */
+            min-height: 297mm; /* A4 height, adjust if needed */
+            box-sizing: border-box;
+            padding: 10mm; /* Margins inside the captured area */
+            background-color: white; /* Default background */
+            margin: 0 auto 10px auto; /* Centered and spacing in the display container */
+            border: 1px solid #ccc; /* Visible border in display */
+            overflow: hidden; /* Important for consistent rendering */
+            position: relative; /* For potential absolute positioning of content over background */
+            background-repeat: no-repeat;
+            background-position: center center;
+            background-size: 100% 100%; /* Stretch background to fill */
+        }
+        /* Container for content that goes ON TOP of the background image */
+        #app2 .app2-marksheet-content-overlay {
+            position: relative; /* Or static if wrapper handles all positioning */
+            z-index: 1; /* Ensure content is above background */
+            background-color: transparent; /* Content area should be transparent if there's a bg image */
+             /* If using absolute positioning for blocks inside, this might need to be 100% height/width */
+        }
+
+
+        #app2 .marksheet { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 15px;}
+        #app2 .marksheet th, #app2 .marksheet td { border: 1px solid #555; padding: 7px 8px; text-align: left; }
+        #app2 .marksheet th { background-color: #e9ecef; font-weight: 600; color: #333; }
+        #app2 .marksheet-header { text-align: center; margin-bottom: 20px; }
+        #app2 .marksheet-header img { max-height: 70px; margin-bottom: 10px; } /* School Logo from data */
+        #app2 .marksheet-header h1 { margin: 0; font-size: 1.8em; color: #004a8c; }
+        #app2 .marksheet-header h2 { margin: 5px 0; font-size: 1.4em; color: #333; font-weight: 600; border-bottom: none; }
+        #app2 .marksheet-header h3 { margin: 5px 0 15px 0; font-size: 1.1em; color: #555; font-weight: normal; text-transform: uppercase; letter-spacing: 1px; border-bottom: none;}
+        #app2 .marksheet-header p { font-size: 0.9em; margin-bottom:10px; color: #555; }
+
+        #app2 .student-info-section { display: flex; flex-wrap: wrap; justify-content: space-between; margin-bottom: 15px; font-size: 0.85rem; }
+        #app2 .student-info-col { flex: 0 0 48%; }
+        #app2 .student-info-table { width: 100%; }
+        #app2 .student-info-table td{ border: none; padding: 4px 0; }
+        #app2 .student-info-table td:first-child { font-weight: 600; width: 120px; color: #444; }
+
+        #app2 .qr-code-container { float: right; margin: 0 0 10px 10px; width:80px; height:80px;} /* App2 specific QR */
+        #app2 .qr-code-container canvas, #app2 .qr-code-container img { width: 100% !important; height: 100% !important; }
+
+        #app2 .marksheet-footer { margin-top: 30px; display:flex; justify-content: space-between; font-size: 0.9em; padding-top: 15px; border-top: 1px dashed #ccc; }
+        #app2 .marksheet-footer span { font-weight: 500; }
+        
+        #app2 #marksheetBackgroundPreview { max-height: 150px; margin-top: 10px; border: 1px solid #ddd; padding:5px; display: none;}
+
+        /* App2 specific print styles (less relevant now with image-first PDF) */
+        @media print {
+            body { padding: 0; margin:0; background-color: #fff !important; -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
+            #appNavbar, .app-page-container > *:not(#app2), 
+            #app2 .container > *:not(#app2_allMarkSheetsDisplayContainer), /* Only show the all marksheets container */
+            #app2 button, 
+            /* Hide all internal screens of app2 except the one for displaying all marksheets for print */
+            #app2 #fileUploadScreen, #app2 #columnMappingScreen, #app2 #reviewStudentDataScreen,
+            #app2 #examDetailsScreen, #app2 #subjectConfigScreen, #app2 #marksEntryScreen,
+            #app2 #app2_imagePreviewContainerWrapper, /* Hide image previews for printing */
+            /* Selectively hide parts of marksheetConversionAndDownloadScreen if that's what app2_allMarkSheetsDisplayContainer is part of */
+             #app2 #marksheetConversionAndDownloadScreen > h2, #app2 #marksheetConversionAndDownloadScreen > button, #app2 #marksheetConversionAndDownloadScreen > hr 
+             { display: none !important; }
+
+            #app2, #app2 .container, #app2_allMarkSheetsDisplayContainer, /* Show container for all marksheets */
+            #app2 .app2-marksheet-render-wrapper { /* Each marksheet */
+                display: block !important; width: 100% !important; max-width: 100% !important;
+                box-shadow: none !important; border: none !important; margin: 0 auto !important; padding: 0 !important;
+                box-sizing: border-box !important; page-break-after: always;
+            }
+            #app2 .app2-marksheet-render-wrapper { padding: 5mm !important; }
+            #app2 .app2-marksheet-render-wrapper:last-child { page-break-after: avoid; }
+
+            #app2 .marksheet { font-size: 10pt; }
+            #app2 .marksheet th, #app2 .marksheet td { padding: 6px 8px; border: 1px solid #333 !important; }
+            #app2 .marksheet th { background-color: #e9ecef !important; }
+            #app2 .marksheet-header img { max-height: 60px; }
+            #app2 .qr-code-container { display: block; }
+            #app2 .marksheet-footer { page-break-inside: avoid; }
+        }
+
+
+        /* --- STYLES FOR APP 3: Student Data Extractor --- */
+        #app3 h2, #app3 h3 { color: #2c5282; border-bottom-color: #e2e8f0; }
+        #app3 h3 { font-size: 1.25em; margin-top: 25px; margin-bottom: 15px; }
+        #app3 label { color: #4a5568; }
+        #app3 select[multiple] { min-height: 150px; }
+        #app3 .mapping-item {
+            display: flex; align-items: center; gap: 15px; margin-bottom: 12px;
+            padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px;
+            background-color: #f7fafc;
+        }
+        #app3 .mapping-item label {
+            flex-basis: 200px; margin-bottom: 0; font-weight: normal; color: #2d3748;
+        }
+        #app3 .mapping-item select { flex-grow: 1; margin-bottom: 0; }
+        #app3 .info-text { font-size: 0.875rem; color: #718096; margin-bottom: 15px; }
+
+    </style>
+</head>
+<body>
+
+    <div id="appNavbar">
+        <button onclick="showApp('app1', this)" class="active-app-btn">JSON Marksheet Generator</button>
+        <button onclick="showApp('app2', this)">Enhanced Marksheet Generator (XLSX)</button>
+        <button onclick="showApp('app3', this)">Data Extractor/Reformatter</button>
+    </div>
+
+    <div class="loading-overlay" id="globalLoadingOverlay">Loading...</div>
+
+    <!-- App 1: JSON Marksheet Generator -->
+    <div id="app1" class="app-page-container">
+        <div class="container">
+            <h2>Marksheet Generator from JSON (Image & PDF)</h2>
+            <div id="jsonUploadSection">
+                <h3>Step 1: Upload JSON File</h3>
+                <input type="file" id="app1_jsonFile" accept=".json"> <!-- Prefixed ID -->
+            </div>
+            <hr style="margin: 20px 0;">
+            <div id="detailsFormSection">
+                <h3>Step 2: Confirm/Update Details</h3>
+                <label for="app1_schoolName">School Name:</label>
+                <input type="text" id="app1_schoolName">
+                <label for="app1_schoolAddress">School Address:</label>
+                <input type="text" id="app1_schoolAddress">
+                <label for="app1_schoolLogo">School Logo (Optional):</label>
+                <input type="file" id="app1_schoolLogo" accept="image/*">
+                <img id="app1_logoPreview" src="#" alt="Logo Preview">
+                <label for="app1_examName">Exam Name/Session:</label>
+                <input type="text" id="app1_examName">
+                <label for="app1_examType">Exam Type:</label>
+                <input type="text" id="app1_examType">
+                <label for="app1_examDate">Marksheet Issue Date:</label>
+                <input type="date" id="app1_examDate">
+                <br>
+                <button id="app1_displayAllMarkSheetsBtn">Display All Marksheets</button>
+            </div>
+            <hr style="margin: 20px 0;">
+            <div id="app1_conversionButtonsSection" style="display:none;">
+                 <h3>Step 3: Convert & Download</h3>
+                <button id="app1_convertToImagesBtn">Convert All to Images</button>
+                <button id="app1_downloadPDFBtn" disabled>Download PDF from Images</button>
+            </div>
+        </div>
+        <div class="container all-marksheets-display-container" id="app1_allMarkSheetsDisplayContainer" style="display:none;"> <!-- Used common class -->
+            <h3>Rendered Marksheets (Scrollable)</h3>
+        </div>
+        <div class="container image-preview-container-wrapper" id="app1_imagePreviewContainerWrapper" style="display:none;"> <!-- Used common class -->
+            <h3>Generated Images Preview (Scrollable)</h3>
+            <div id="app1_imagePreviewContainer" class="image-preview-container" style="max-height: 400px; overflow-y:auto;"></div> <!-- Used common class -->
+        </div>
+    </div>
+
+    <!-- App 2: Enhanced Marksheet Generator (XLSX) -->
+    <div id="app2" class="app-page-container hidden">
+        <div class="container">
+            <div id="app2_fileUploadScreen" class="screen active">
+                <h2>Step 1: Upload Student Data (XLSX)</h2>
+                <p>Upload an XLSX file. Next, you'll map its columns and review data.</p>
+                <label for="app2_xlsxFile">Select XLSX File:</label>
+                <input type="file" id="app2_xlsxFile" accept=".xlsx, .xls">
+                <button id="app2_nextToColumnMappingBtn">Next: Map Columns</button>
+            </div>
+
+            <div id="app2_columnMappingScreen" class="screen">
+                <h2>Step 1.5: Map Excel Columns</h2>
+                <p>Select the Excel column for each required field. Choose "--- Not in File ---" if unavailable.</p>
+                <div id="app2_columnMappingDiv"></div>
+                <button id="app2_backToFileUploadFromMappingBtn" class="secondary">Back</button>
+                <button id="app2_nextToReviewDataBtn">Next: Review Data</button>
+            </div>
+
+            <div id="app2_reviewStudentDataScreen" class="screen">
+                <h2>Step 2: Review & Complete Student Data</h2>
+                <p>Review the imported student data. You can edit or fill in missing information below. This data will be used for marksheets.</p>
+                <div id="app2_reviewStudentDataTableContainer">
+                    <table class="review-table">
+                        <thead>
+                            <tr id="app2_reviewStudentDataTableHeader"></tr>
+                        </thead>
+                        <tbody id="app2_reviewStudentDataTableBody"></tbody>
+                    </table>
+                </div>
+                <button id="app2_backToColumnMappingFromReviewBtn" class="secondary">Back to Mapping</button>
+                <button id="app2_saveReviewedDataAndContinueBtn">Save Changes & Continue</button>
+                <button id="app2_skipReviewAndContinueBtn" class="secondary">Skip Review & Continue</button>
+            </div>
+
+            <div id="app2_examDetailsScreen" class="screen">
+                <h2>Step 3: Exam & School Details</h2>
+                <label for="app2_examType">Exam Type (e.g., Annual, Half-Yearly):</label>
+                <input type="text" id="app2_examType" value="Annual Examination">
+                <label for="app2_examName">Exam Session/Name (e.g., Final Term 2024-2025):</label>
+                <input type="text" id="app2_examName" value="Final Term Examination 2024-25">
+                <label for="app2_generalClassName">Default Class (for Marksheet Header if not in student data):</label>
+                <input type="text" id="app2_generalClassName" value="Class X">
+                <label for="app2_schoolName">School Name:</label>
+                <input type="text" id="app2_schoolName" value="ANGEL HIGH SCHOOL">
+                <label for="app2_schoolAddress">School Address:</label>
+                <input type="text" id="app2_schoolAddress" value="Shair Mohammad, Bhigo, DARBHANGA (BIHAR)">
+                <label for="app2_schoolLogo">School Logo (on marksheet):</label>
+                <input type="file" id="app2_schoolLogo" accept="image/*">
+                <img id="app2_logoPreview" src="#" alt="Logo Preview" style="max-height: 80px; margin-top: 10px; display: none; border: 1px solid #ddd; padding:5px;">
+                
+                <hr style="margin: 15px 0;">
+                <label for="app2_marksheetBackgroundFile">Marksheet Background Template (Optional Image):</label>
+                <input type="file" id="app2_marksheetBackgroundFile" accept="image/*">
+                <img id="app2_marksheetBackgroundPreview" src="#" alt="Background Preview">
+                <p class="info-text" style="font-size:0.8em; color: #555;">If uploaded, this image will be the background for each marksheet. Ensure your template has clear areas for data.</p>
+
+
+                <button id="app2_backToReviewDataFromExamDetailsBtn" class="secondary">Back to Review Data</button>
+                <button id="app2_nextToSubjectConfigBtn">Next: Configure Subjects</button>
+            </div>
+
+            <div id="app2_subjectConfigScreen" class="screen">
+                <h2>Step 4: Configure Subjects</h2>
+                <div id="app2_subjectList"></div>
+                <button id="app2_addSubjectBtn">Add New Subject</button>
+                <hr style="margin: 20px 0;">
+                <button id="app2_backToExamDetailsBtn" class="secondary">Back</button>
+                <button id="app2_nextToMarksEntryBtn">Next: Enter Marks</button>
+            </div>
+
+            <div id="app2_marksEntryScreen" class="screen">
+                <h2>Step 5: Enter Marks</h2>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div id="app2_studentSelectionContainer" style="flex: 1; min-width: 250px;">
+                        <h3>Select Student</h3>
+                        <div id="app2_studentListContainer"></div>
+                    </div>
+                    <div id="app2_marksFormContainer" style="flex: 2; min-width: 300px;">
+                        <h3>Enter Marks for <span id="app2_currentStudentName"></span></h3>
+                        <div id="app2_marksInputForm"></div>
+                        <button id="app2_saveMarksBtn">Save Marks</button>
+                        <button id="app2_saveAndNextStudentBtn">Save & Next Student</button>
+                    </div>
+                </div>
+                <hr style="margin: 20px 0;">
+                <button id="app2_backToSubjectConfigBtn" class="secondary">Back</button>
+                <button id="app2_nextToConversionAndDownloadBtn">Next: Display Marksheets for Conversion</button>
+            </div>
+
+            <div id="app2_marksheetConversionAndDownloadScreen" class="screen">
+                <h2>Step 6: Marksheet Display, Conversion & Download</h2>
+                <p>All generated marksheets are displayed below. You can convert them to images and then download as a single PDF.</p>
+                <button id="app2_displayAllMarkSheetsBtn">Refresh/Display All Marksheets</button>
+                <hr style="margin:10px 0">
+                <button id="app2_convertToImagesBtn">Convert All Marksheets to Images</button>
+                <button id="app2_downloadPDFFromImagesBtn" disabled>Download PDF from Images</button>
+                <hr style="margin:20px 0">
+                <div id="app2_allMarkSheetsDisplayWrapper" class="container all-marksheets-display-container" style="display:none;">
+                     <h3>Rendered Marksheets (Scrollable)</h3>
+                     <div id="app2_allMarkSheetsDisplayContainer"></div>
+                </div>
+                <div id="app2_imagePreviewContainerWrapper" class="container image-preview-container-wrapper" style="display:none;">
+                    <h3>Generated Images Preview (Scrollable)</h3>
+                    <div id="app2_imagePreviewContainer" class="image-preview-container" style="max-height: 400px; overflow-y:auto;"></div>
+                </div>
+                <hr style="margin: 20px 0;">
+                <button id="app2_backToMarksEntryBtn" class="secondary">Back to Marks Entry</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- App 3: Data Extractor/Reformatter -->
+    <div id="app3" class="app-page-container hidden">
+        <div class="container">
+            <h2>Student Data Extractor & Reformatter</h2>
+            <div id="app3_uploadSection">
+                <h3>Step 1: Upload Your XLSX File</h3>
+                <p class="info-text">Select the Excel file containing student information.</p>
+                <label for="app3_xlsxFile">Choose XLSX File:</label>
+                <input type="file" id="app3_xlsxFile" accept=".xlsx, .xls">
+            </div>
+            <div id="app3_mappingSection" style="display:none;">
+                <h3>Step 2: Map Standard Student Fields</h3>
+                <p class="info-text">For each standard field listed below, select the corresponding column header from your uploaded file. If a field is not present in your file, choose "--- Not Available ---".</p>
+                <div id="app3_standardFieldsMappingContainer"></div>
+                <h3>Step 3: Select Extra Columns to Include (Optional)</h3>
+                <p class="info-text">Choose any additional columns from your original file that you want to include in the new spreadsheet. These will be added after the standard fields.</p>
+                <label for="app3_extraColumnsSelect">Available Columns from Your File (Hold Ctrl/Cmd to select multiple):</label>
+                <select id="app3_extraColumnsSelect" multiple></select>
+            </div>
+            <button id="app3_processAndDownloadBtn" disabled>Process File and Download New XLSX</button>
+        </div>
+    </div>
+
+<script>
+    // --- Global App Management ---
+    const globalLoadingOverlay = document.getElementById('globalLoadingOverlay');
+
+    function showGlobalLoading(message = "Processing...") {
+        globalLoadingOverlay.textContent = message;
+        globalLoadingOverlay.style.display = 'flex';
+    }
+    function hideGlobalLoading() {
+        globalLoadingOverlay.style.display = 'none';
+    }
+
+    function showApp(appId, clickedButton) {
+        document.querySelectorAll('.app-page-container').forEach(appDiv => {
+            appDiv.classList.add('hidden');
+        });
+        document.getElementById(appId).classList.remove('hidden');
+
+        document.querySelectorAll('#appNavbar button').forEach(btn => {
+            btn.classList.remove('active-app-btn');
+        });
+        if (clickedButton) {
+            clickedButton.classList.add('active-app-btn');
+        }
+        window.scrollTo(0,0); 
+    }
+
+    // --- App 1: JSON Marksheet Generator ---
+    (function() {
+        const appRoot = document.getElementById('app1');
+        if (!appRoot) return;
+
+        const { jsPDF } = window.jspdf; 
+
+        let jsonData = null;
+        let subjectsConfiguration = [];
+        let students = [];
+        let formExamDetails = {};
+        let formSchoolLogoBase64 = null;
+        let generatedImageDataUrls = [];
+
+        const jsonFileInput = appRoot.querySelector('#app1_jsonFile');
+        const schoolNameInput = appRoot.querySelector('#app1_schoolName');
+        const schoolAddressInput = appRoot.querySelector('#app1_schoolAddress');
+        const schoolLogoInput = appRoot.querySelector('#app1_schoolLogo');
+        const logoPreview = appRoot.querySelector('#app1_logoPreview');
+        const examNameInput = appRoot.querySelector('#app1_examName');
+        const examTypeInput = appRoot.querySelector('#app1_examType');
+        const examDateInput = appRoot.querySelector('#app1_examDate');
+        
+        const displayAllMarkSheetsBtn = appRoot.querySelector('#app1_displayAllMarkSheetsBtn');
+        const conversionButtonsSection = appRoot.querySelector('#app1_conversionButtonsSection');
+        const convertToImagesBtn = appRoot.querySelector('#app1_convertToImagesBtn');
+        const downloadPDFBtn = appRoot.querySelector('#app1_downloadPDFBtn');
+        
+        const allMarkSheetsDisplayContainer = appRoot.querySelector('#app1_allMarkSheetsDisplayContainer');
+        const imagePreviewContainerWrapper = appRoot.querySelector('#app1_imagePreviewContainerWrapper');
+        const imagePreviewContainer = appRoot.querySelector('#app1_imagePreviewContainer');
+
+        examDateInput.valueAsDate = new Date(); 
+
+        jsonFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    jsonData = JSON.parse(e.target.result);
+                    if (jsonData && jsonData.examDetails && jsonData.students && jsonData.subjectsConfiguration) {
+                        schoolNameInput.value = jsonData.examDetails.schoolName || '';
+                        schoolAddressInput.value = jsonData.examDetails.schoolAddress || '';
+                        examNameInput.value = jsonData.examDetails.name || '';
+                        examTypeInput.value = jsonData.examDetails.type || '';
+                        if (jsonData.examDetails.schoolLogoBase64 && typeof jsonData.examDetails.schoolLogoBase64 === 'string' && jsonData.examDetails.schoolLogoBase64.startsWith('data:image')) {
+                            formSchoolLogoBase64 = jsonData.examDetails.schoolLogoBase64;
+                            logoPreview.src = formSchoolLogoBase64; logoPreview.style.display = 'block';
+                        } else { formSchoolLogoBase64 = null; logoPreview.style.display = 'none'; }
+                        subjectsConfiguration = jsonData.subjectsConfiguration;
+                        students = jsonData.students;
+                        alert(`App1: JSON loaded: ${students.length} student(s).`);
+                        displayAllMarkSheetsBtn.disabled = students.length === 0;
+                    } else { throw new Error("Invalid JSON structure for App1."); }
+                } catch (error) {
+                    alert("App1: Error parsing JSON: " + error.message);
+                    jsonData = null; students = []; subjectsConfiguration = [];
+                    displayAllMarkSheetsBtn.disabled = true;
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        schoolLogoInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    formSchoolLogoBase64 = e.target.result;
+                    logoPreview.src = formSchoolLogoBase64; logoPreview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                formSchoolLogoBase64 = (jsonData && jsonData.examDetails && jsonData.examDetails.schoolLogoBase64) ? jsonData.examDetails.schoolLogoBase64 : null;
+                if (formSchoolLogoBase64) { logoPreview.src = formSchoolLogoBase64; logoPreview.style.display = 'block';} 
+                else {logoPreview.src = "#"; logoPreview.style.display = 'none';}
+            }
+        });
+        
+        function updateFormExamDetails_App1() {
+            formExamDetails = {
+                schoolName: schoolNameInput.value.trim(),
+                schoolAddress: schoolAddressInput.value.trim(),
+                name: examNameInput.value.trim(),
+                type: examTypeInput.value.trim(),
+                issueDate: examDateInput.value ? new Date(examDateInput.value).toLocaleDateString('en-GB') : new Date().toLocaleDateString('en-GB'),
+                generalClass: (jsonData && jsonData.examDetails) ? jsonData.examDetails.generalClass : ''
+            };
+        }
+
+        displayAllMarkSheetsBtn.addEventListener('click', () => {
+            if (!jsonData || students.length === 0) {
+                alert("App1: Upload JSON first."); return;
+            }
+            showGlobalLoading("App1: Rendering all marksheets...");
+            updateFormExamDetails_App1();
+            allMarkSheetsDisplayContainer.innerHTML = ''; 
+            imagePreviewContainer.innerHTML = ''; 
+            generatedImageDataUrls = []; 
+            downloadPDFBtn.disabled = true;
+
+            students.forEach((student, index) => {
+                const uniqueSuffix = `app1-${student.StudentID || index}`; // Prefixed uniqueSuffix
+                const html = renderMarksheetHTML_App1(student, formExamDetails, subjectsConfiguration, formSchoolLogoBase64, uniqueSuffix);
+                allMarkSheetsDisplayContainer.innerHTML += html;
+            });
+            
+            setTimeout(() => {
+                allMarkSheetsDisplayContainer.querySelectorAll('.marksheet-render-wrapper').forEach((marksheetDiv, index) => {
+                    const studentForQR = students[index];
+                    const qrId = marksheetDiv.dataset.qrId;
+                    const qrPlaceholderElement = marksheetDiv.querySelector(`#${qrId}`);
+                    if (qrPlaceholderElement && studentForQR) {
+                        const qrData = { SID: studentForQR.StudentID, N: studentForQR.Name, R: studentForQR.RollNumber, C: studentForQR.Class || formExamDetails.generalClass, E: formExamDetails.name, TM: studentForQR.calculatedTotalMarks, P: studentForQR.calculatedPercentage, Res: studentForQR.calculatedOverallResult, Sch: formExamDetails.schoolName };
+                        qrPlaceholderElement.innerHTML = '';
+                        try {
+                            new QRCode(qrPlaceholderElement, { text: JSON.stringify(qrData), width: 60, height: 60, colorDark : "#000",colorLight : "#fff", correctLevel : QRCode.CorrectLevel.M });
+                        } catch (qrError) { console.error("App1 QR Error:", qrError, qrPlaceholderElement); }
+                    }
+                });
+                allMarkSheetsDisplayContainer.style.display = 'block';
+                conversionButtonsSection.style.display = 'block';
+                imagePreviewContainerWrapper.style.display = 'none'; 
+                hideGlobalLoading();
+            }, 300); // Increased delay slightly for QR rendering 
+        });
+
+        function renderMarksheetHTML_App1(student, currentExamDetails, currentSubjectsConfig, logoBase64, uniqueSuffix) {
+            let totalMarksObtained = student.calculatedTotalMarks !== undefined ? student.calculatedTotalMarks : 0;
+            let totalMaximumMarks = student.calculatedMaximumMarks !== undefined ? student.calculatedMaximumMarks : 0;
+            let percentage = student.calculatedPercentage !== undefined ? String(student.calculatedPercentage) : "0.00";
+            let overallResult = student.calculatedOverallResult !== undefined ? student.calculatedOverallResult : "FAIL";
+
+            if (student.calculatedTotalMarks === undefined) { 
+                totalMarksObtained = 0; totalMaximumMarks = 0;
+                currentSubjectsConfig.forEach(sc => {
+                    const m = student.marks[sc.name];
+                    if (m !== null && m !== undefined && typeof m === 'number') totalMarksObtained += m;
+                    if (sc.totalMarks && typeof sc.totalMarks === 'number') totalMaximumMarks += sc.totalMarks;
+                });
+                percentage = totalMaximumMarks > 0 ? ((totalMarksObtained / totalMaximumMarks) * 100).toFixed(2) : "0.00";
+                overallResult = "PASS"; 
+                for (const sc of currentSubjectsConfig) {
+                    const m = student.marks[sc.name];
+                    const passM = sc.passMarks;
+                     if (m === null || m === undefined || (typeof m === 'number' && typeof passM === 'number' && m < passM)) {
+                        overallResult = "FAIL";
+                        break; 
+                    }
+                }
+            }
+
+            let subjectRows = '';
+            currentSubjectsConfig.forEach(sc => {
+                const m = student.marks[sc.name];
+                const d = (m === null || m === undefined) ? 'AB' : m;
+                const r = (m === null || m === undefined || (typeof m === 'number' && typeof sc.passMarks ==='number' && m < sc.passMarks)) ? 'FAIL' : 'PASS';
+                subjectRows += `<tr><td>${sc.name}</td><td style="text-align:center;">${sc.totalMarks || 'N/A'}</td><td style="text-align:center;">${sc.passMarks || 'N/A'}</td><td style="text-align:center;">${d}</td><td style="text-align:center;">${r}</td></tr>`;
+            });
+            const qrPlaceholderId = `qrPlaceholder-${uniqueSuffix}`;
+            return `
+                <div class="marksheet-render-wrapper"> <!-- App1 specific class -->
+                    <div class="marksheet-header">
+                        ${logoBase64 ? `<img src="${logoBase64}" alt="School Logo">` : ''}
+                        <h1>${currentExamDetails.schoolName || ''}</h1><p>${currentExamDetails.schoolAddress || ''}</p>
+                        <h2>${currentExamDetails.type || ''} - ${currentExamDetails.name || ''}</h2><h3>Progress Report</h3>
+                    </div>
+                    <div class="qr-code-container" id="${qrPlaceholderId}" data-qr-id="${qrPlaceholderId}"></div> <!-- Added data-qr-id for safety -->
+                    <div class="student-info-section">
+                        <div class="student-info-col">
+                            <table class="student-info-table">
+                                <tr><td>Student ID:</td><td>${student.StudentID || 'N/A'}</td></tr>
+                                <tr><td>Name:</td><td>${student.Name || 'N/A'}</td></tr>
+                                <tr><td>Father's:</td><td>${student.FatherName || 'N/A'}</td></tr>
+                                <tr><td>Mother's:</td><td>${student.MotherName || 'N/A'}</td></tr>
+                                <tr><td>Gender:</td><td>${student.Gender || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                        <div class="student-info-col">
+                            <table class="student-info-table">
+                                <tr><td>Roll No:</td><td>${student.RollNumber || 'N/A'}</td></tr>
+                                <tr><td>Class:</td><td>${student.Class || currentExamDetails.generalClass || 'N/A'}</td></tr>
+                                <tr><td>Aadhar:</td><td>${student.Aadhar || 'N/A'}</td></tr>
+                                <tr><td>Mobile:</td><td>${student.Mobile || 'N/A'}</td></tr>
+                                <tr><td>Reg. Date:</td><td>${student.RegistrationDate || 'N/A'}</td></tr>
+                            </table>
+                        </div>
+                    </div>
+                    <table class="marksheet">
+                        <thead><tr><th>Subject</th><th>Max</th><th>Pass</th><th>Obt.</th><th>Result</th></tr></thead>
+                        <tbody>${subjectRows}</tbody>
+                        <tfoot>
+                            <tr><th colspan="3" style="text-align:right;">Total:</th><th style="text-align:center;">${totalMarksObtained}/${totalMaximumMarks}</th><th></th></tr>
+                            <tr><th colspan="3" style="text-align:right;">Percent:</th><th style="text-align:center;">${percentage}%</th><th></th></tr>
+                            <tr><th colspan="3" style="text-align:right;">Result:</th><th colspan="2" style="text-align:center;font-weight:bold;">${overallResult}</th></tr>
+                        </tfoot>
+                    </table>
+                    <div class="marksheet-footer"><span>Issue Date: ${currentExamDetails.issueDate}</span><span>Teacher</span><span>Principal</span></div>
+                </div>`;
+        }
+
+        convertToImagesBtn.addEventListener('click', async () => {
+            const marksheetElements = allMarkSheetsDisplayContainer.querySelectorAll('.marksheet-render-wrapper');
+            if (marksheetElements.length === 0) {
+                alert("App1: No marksheets displayed to convert."); return;
+            }
+            showGlobalLoading("App1: Converting marksheets to images...");
+            imagePreviewContainer.innerHTML = ''; 
+            generatedImageDataUrls = []; 
+            imagePreviewContainerWrapper.style.display = 'block';
+
+            for (let i = 0; i < marksheetElements.length; i++) {
+                const element = marksheetElements[i];
+                try {
+                    const canvas = await html2canvas(element, {
+                        scale: 1.5, useCORS: true, logging: false,
+                        width: element.offsetWidth, height: element.offsetHeight,
+                        windowWidth: element.scrollWidth, windowHeight: element.scrollHeight
+                    });
+                    const imgDataUrl = canvas.toDataURL('image/png');
+                    generatedImageDataUrls.push(imgDataUrl);
+                    const imgElement = document.createElement('img');
+                    imgElement.src = imgDataUrl;
+                    imagePreviewContainer.appendChild(imgElement);
+                } catch (error) {
+                    console.error("App1: Error converting marksheet to image:", error, element);
+                    alert("App1: Error converting one or more marksheets to image. Check console.");
+                }
+            }
+            hideGlobalLoading();
+            if (generatedImageDataUrls.length > 0) {
+                downloadPDFBtn.disabled = false;
+                alert(`App1: ${generatedImageDataUrls.length} marksheets converted to images.`);
+            } else {
+                alert("App1: No images were generated.");
+            }
+        });
+
+        downloadPDFBtn.addEventListener('click', async () => {
+            if (generatedImageDataUrls.length === 0) {
+                alert("App1: No images available to create PDF. Convert marksheets to images first."); return;
+            }
+            showGlobalLoading("App1: Creating PDF from images...");
+            
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const A4_PAGE_WIDTH_MM = 210; const A4_PAGE_HEIGHT_MM = 297;
+            const MARGIN_MM = 10;
+            const contentWidthMm = A4_PAGE_WIDTH_MM - (2 * MARGIN_MM);
+            const contentHeightMm = A4_PAGE_HEIGHT_MM - (2 * MARGIN_MM);
+
+            for (let i = 0; i < generatedImageDataUrls.length; i++) {
+                if (i > 0) pdf.addPage();
+                const imgDataUrl = generatedImageDataUrls[i];
+                try {
+                    const dimensions = await getImageDimensions_App1(imgDataUrl);
+                    let imgWidthInPdf = contentWidthMm;
+                    let imgHeightInPdf = contentWidthMm / (dimensions.width / dimensions.height);
+                    if (imgHeightInPdf > contentHeightMm) {
+                        imgHeightInPdf = contentHeightMm;
+                        imgWidthInPdf = contentHeightMm * (dimensions.width / dimensions.height);
+                    }
+                    const xOffset = MARGIN_MM + (contentWidthMm - imgWidthInPdf) / 2;
+                    const yOffset = MARGIN_MM;
+                    pdf.addImage(imgDataUrl, 'PNG', xOffset, yOffset, imgWidthInPdf, imgHeightInPdf);
+                } catch (e) {
+                     console.error("App1: Error getting image dimensions:", e);
+                     pdf.addImage(imgDataUrl, 'PNG', MARGIN_MM, MARGIN_MM, contentWidthMm, contentHeightMm); 
+                }
+            }
+            pdf.save(`All_Marksheets_${(formExamDetails.schoolName || "School").replace(/\s+/g, '_')}_App1.pdf`);
+            hideGlobalLoading();
+        });
+
+        function getImageDimensions_App1(dataUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve({ width: img.width, height: img.height });
+                img.onerror = (err) => reject(err);
+                img.src = dataUrl;
+            });
+        }
+        displayAllMarkSheetsBtn.disabled = true;
+    })();
+
+    // --- App 2: Enhanced Marksheet Generator (XLSX) ---
+    (function() {
+        const appRoot = document.getElementById('app2');
+        if (!appRoot) return;
+        
+        const { jsPDF } = window.jspdf; // For App2's new PDF generation
+
+        let rawStudentsDataFromExcel = [];
+        let excelHeaders = [];
+        let columnMapping = {};
+        let studentsData = []; 
+        let examDetails_App2 = {}; // Prefixed
+        let schoolLogoBase64_App2 = null; // Prefixed
+        let app2_marksheetBackgroundImageDataUrl = null; // For custom background
+        let subjectsConfig_App2 = []; // Prefixed
+        let currentStudentIndexForMarks_App2 = -1; // Prefixed
+        // currentStudentIndexForPreview is not needed with the new "display all" flow
+        
+        let app2_generatedImageDataUrls = []; // For storing image data URLs
+
+        const REQUIRED_APP_FIELDS_App2 = [ 
+            { key: 'StudentID', label: 'Student ID', default: '', type: 'text' }, { key: 'RollNumber', label: 'Roll Number', default: '', type: 'text' },
+            { key: 'Name', label: 'Name', default: '', type: 'text' }, { key: 'Mobile', label: 'Mobile', default: '', type: 'tel' },
+            { key: 'Gmail', label: 'Gmail', default: '', type: 'email' }, { key: 'Password', label: 'Password', default: '', type: 'text' },
+            { key: 'FatherName', label: "Father's Name", default: '', type: 'text' }, { key: 'MotherName', label: "Mother's Name", default: '', type: 'text' },
+            { key: 'Class', label: 'Class (Student Specific)', default: '', type: 'text' }, { key: 'Address', label: 'Address', default: '', type: 'text' },
+            { key: 'PhotoURL', label: 'Photo URL', default: '', type: 'url' }, { key: 'Aadhar', label: 'Aadhar Number', default: '', type: 'text' },
+            { key: 'Gender', label: 'Gender', default: '', type: 'text' }, { key: 'RegistrationDate', label: 'Registration Date', default: '', type: 'date' }
+        ];
+        
+        // Screen navigation for App2
+        function showScreen_App2(screenId) {
+            appRoot.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+            const targetScreen = appRoot.querySelector(`#app2_${screenId}`); 
+            if (targetScreen) targetScreen.classList.add('active');
+            else console.error("App2: Screen not found -", `app2_${screenId}`);
+            window.scrollTo(0,0);
+        }
+
+        // DOM elements for App2 (prefixed)
+        const app2_xlsxFileInput = appRoot.querySelector('#app2_xlsxFile');
+        const app2_nextToColumnMappingBtn = appRoot.querySelector('#app2_nextToColumnMappingBtn');
+        const app2_columnMappingDiv = appRoot.querySelector('#app2_columnMappingDiv');
+        const app2_backToFileUploadFromMappingBtn = appRoot.querySelector('#app2_backToFileUploadFromMappingBtn');
+        const app2_nextToReviewDataBtn = appRoot.querySelector('#app2_nextToReviewDataBtn');
+        const app2_reviewStudentDataTableHeader = appRoot.querySelector('#app2_reviewStudentDataTableHeader');
+        const app2_reviewStudentDataTableBody = appRoot.querySelector('#app2_reviewStudentDataTableBody');
+        const app2_backToColumnMappingFromReviewBtn = appRoot.querySelector('#app2_backToColumnMappingFromReviewBtn');
+        const app2_saveReviewedDataAndContinueBtn = appRoot.querySelector('#app2_saveReviewedDataAndContinueBtn');
+        const app2_skipReviewAndContinueBtn = appRoot.querySelector('#app2_skipReviewAndContinueBtn');
+        const app2_examTypeInput = appRoot.querySelector('#app2_examType');
+        const app2_examNameInput = appRoot.querySelector('#app2_examName');
+        const app2_generalClassNameInput = appRoot.querySelector('#app2_generalClassName');
+        const app2_schoolNameInput = appRoot.querySelector('#app2_schoolName');
+        const app2_schoolAddressInput = appRoot.querySelector('#app2_schoolAddress');
+        const app2_schoolLogoInput = appRoot.querySelector('#app2_schoolLogo');
+        const app2_logoPreview = appRoot.querySelector('#app2_logoPreview');
+        const app2_marksheetBackgroundFileInput = appRoot.querySelector('#app2_marksheetBackgroundFile');
+        const app2_marksheetBackgroundPreview = appRoot.querySelector('#app2_marksheetBackgroundPreview');
+        const app2_backToReviewDataFromExamDetailsBtn = appRoot.querySelector('#app2_backToReviewDataFromExamDetailsBtn');
+        const app2_nextToSubjectConfigBtn = appRoot.querySelector('#app2_nextToSubjectConfigBtn');
+        const app2_subjectListDiv = appRoot.querySelector('#app2_subjectList');
+        const app2_addSubjectBtn = appRoot.querySelector('#app2_addSubjectBtn');
+        const app2_backToExamDetailsBtn = appRoot.querySelector('#app2_backToExamDetailsBtn');
+        const app2_nextToMarksEntryBtn = appRoot.querySelector('#app2_nextToMarksEntryBtn');
+        const app2_studentListContainer = appRoot.querySelector('#app2_studentListContainer');
+        const app2_currentStudentNameSpan = appRoot.querySelector('#app2_currentStudentName');
+        const app2_marksInputFormDiv = appRoot.querySelector('#app2_marksInputForm');
+        const app2_saveMarksBtn = appRoot.querySelector('#app2_saveMarksBtn');
+        const app2_saveAndNextStudentBtn = appRoot.querySelector('#app2_saveAndNextStudentBtn');
+        const app2_backToSubjectConfigBtn = appRoot.querySelector('#app2_backToSubjectConfigBtn');
+        const app2_nextToConversionAndDownloadBtn = appRoot.querySelector('#app2_nextToConversionAndDownloadBtn');
+
+        const app2_displayAllMarkSheetsBtn = appRoot.querySelector('#app2_displayAllMarkSheetsBtn');
+        const app2_allMarkSheetsDisplayWrapper = appRoot.querySelector('#app2_allMarkSheetsDisplayWrapper');
+        const app2_allMarkSheetsDisplayContainer = appRoot.querySelector('#app2_allMarkSheetsDisplayContainer');
+        const app2_convertToImagesBtn = appRoot.querySelector('#app2_convertToImagesBtn');
+        const app2_downloadPDFFromImagesBtn = appRoot.querySelector('#app2_downloadPDFFromImagesBtn');
+        const app2_imagePreviewContainerWrapper = appRoot.querySelector('#app2_imagePreviewContainerWrapper');
+        const app2_imagePreviewContainer = appRoot.querySelector('#app2_imagePreviewContainer');
+        const app2_backToMarksEntryBtn = appRoot.querySelector('#app2_backToMarksEntryBtn');
+
+        // Event Listeners for App2
+        app2_nextToColumnMappingBtn.addEventListener('click', () => {
+            if (!app2_xlsxFileInput.files || app2_xlsxFileInput.files.length === 0) {
+                alert('App2: Please upload an XLSX file.'); return;
+            }
+            const file = app2_xlsxFileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const headerJson = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                    if (headerJson.length === 0) { alert("App2: Excel sheet empty or no headers."); return; }
+                    excelHeaders = headerJson[0].map(String);
+                    rawStudentsDataFromExcel = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                    if(rawStudentsDataFromExcel.length === 0){ alert("App2: No data rows in Excel."); return; }
+                    populateColumnMappingUI_App2();
+                    showScreen_App2('columnMappingScreen');
+                } catch (error) { console.error("App2 Excel Error:", error); alert("App2: Error processing Excel: " + error.message); }
+            };
+            reader.onerror = (ex) => { console.error("App2 FileRead Error:",ex); alert('App2: Error reading file.'); };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function populateColumnMappingUI_App2() {
+            app2_columnMappingDiv.innerHTML = '';
+            REQUIRED_APP_FIELDS_App2.forEach(field => {
+                const itemDiv = document.createElement('div');
+                itemDiv.classList.add('column-mapping-item'); // App2 specific or common if styled commonly
+                const label = document.createElement('label');
+                label.htmlFor = `app2-map-${field.key}`; label.textContent = `${field.label}:`;
+                const select = document.createElement('select');
+                select.id = `app2-map-${field.key}`; select.dataset.appField = field.key;
+                select.innerHTML = `<option value="">--- Select Column ---</option>` +
+                                   excelHeaders.map(h => `<option value="${h}" ${ (h.toLowerCase().replace(/[\s\W]/g, '') === field.label.toLowerCase().replace(/[\s\W]/g, '') || h.toLowerCase().replace(/[\s\W]/g, '') === field.key.toLowerCase().replace(/[\s\W]/g, '')) ? 'selected' : ''}>${h}</option>`).join('') +
+                                   `<option value="--- NOT_IN_FILE ---">--- Not in File ---</option>`;
+                itemDiv.appendChild(label); itemDiv.appendChild(select);
+                app2_columnMappingDiv.appendChild(itemDiv);
+            });
+        }
+        app2_backToFileUploadFromMappingBtn.addEventListener('click', () => showScreen_App2('fileUploadScreen'));
+        app2_nextToReviewDataBtn.addEventListener('click', () => {
+            columnMapping = {};
+            let isNameMapped = false, isRollNumberMapped = false;
+            appRoot.querySelectorAll('#app2_columnMappingDiv select').forEach(select => { // Query within App2 root
+                columnMapping[select.dataset.appField] = select.value;
+                if (select.dataset.appField === 'Name' && select.value && select.value !== "--- NOT_IN_FILE ---") isNameMapped = true;
+                if (select.dataset.appField === 'RollNumber' && select.value && select.value !== "--- NOT_IN_FILE ---") isRollNumberMapped = true;
+            });
+
+            if (!isNameMapped || !isRollNumberMapped) {
+                let msg = `App2: Critical fields (${!isNameMapped ? "Name " : ""}${!isRollNumberMapped ? "Roll Number" : ""}) not mapped. Continue?`;
+                if (!confirm(msg.trim())) return;
+            }
+            
+            studentsData = rawStudentsDataFromExcel.map(row => { 
+                const student = { marks: {} }; 
+                REQUIRED_APP_FIELDS_App2.forEach(appField => {
+                    const excelHeader = columnMapping[appField.key];
+                    if (excelHeader && excelHeader !== "--- NOT_IN_FILE ---" && excelHeader !== "") {
+                        student[appField.key] = row[excelHeader] !== undefined ? String(row[excelHeader]) : appField.default;
+                    } else {
+                        student[appField.key] = appField.default;
+                    }
+                });
+                return student;
+            });
+            if (studentsData.length === 0) { alert("App2: No student data processed."); return; }
+            populateReviewStudentDataUI_App2();
+            showScreen_App2('reviewStudentDataScreen');
+        });
+        
+        function populateReviewStudentDataUI_App2() {
+            app2_reviewStudentDataTableHeader.innerHTML = ''; app2_reviewStudentDataTableBody.innerHTML = '';
+            REQUIRED_APP_FIELDS_App2.forEach(field => {
+                const th = document.createElement('th');
+                th.textContent = field.label;
+                app2_reviewStudentDataTableHeader.appendChild(th);
+            });
+            studentsData.forEach((student, studentIndex) => {
+                const tr = document.createElement('tr');
+                REQUIRED_APP_FIELDS_App2.forEach(field => {
+                    const td = document.createElement('td');
+                    const input = document.createElement('input');
+                    input.type = field.type; 
+                    input.value = student[field.key] || '';
+                    input.dataset.studentIndex = studentIndex;
+                    input.dataset.fieldKey = field.key;
+                    input.title = `Edit ${field.label} for ${student.Name || 'this student'}`;
+                    td.appendChild(input);
+                    tr.appendChild(td);
+                });
+                app2_reviewStudentDataTableBody.appendChild(tr);
+            });
+        }
+        app2_backToColumnMappingFromReviewBtn.addEventListener('click', () => showScreen_App2('columnMappingScreen'));
+        app2_saveReviewedDataAndContinueBtn.addEventListener('click', () => {
+            appRoot.querySelectorAll('#app2_reviewStudentDataTableBody input').forEach(input => {
+                const studentIndex = parseInt(input.dataset.studentIndex);
+                const fieldKey = input.dataset.fieldKey;
+                if (studentsData[studentIndex]) {
+                    studentsData[studentIndex][fieldKey] = input.value;
+                }
+            });
+            console.log("App2: Student data updated after review:", studentsData);
+            alert("App2: Student data saved!");
+            showScreen_App2('examDetailsScreen');
+        });
+        app2_skipReviewAndContinueBtn.addEventListener('click', () => {
+            console.log("App2: Skipped review. Using data as mapped:", studentsData);
+            showScreen_App2('examDetailsScreen');
+        });
+
+        app2_schoolLogoInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => { schoolLogoBase64_App2 = e.target.result; app2_logoPreview.src = schoolLogoBase64_App2; app2_logoPreview.style.display = 'block'; }
+                reader.readAsDataURL(file);
+            } else { schoolLogoBase64_App2 = null; app2_logoPreview.style.display = 'none'; }
+        });
+        app2_marksheetBackgroundFileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => { 
+                    app2_marksheetBackgroundImageDataUrl = e.target.result; 
+                    app2_marksheetBackgroundPreview.src = app2_marksheetBackgroundImageDataUrl; 
+                    app2_marksheetBackgroundPreview.style.display = 'block'; 
+                }
+                reader.readAsDataURL(file);
+            } else { 
+                app2_marksheetBackgroundImageDataUrl = null; 
+                app2_marksheetBackgroundPreview.style.display = 'none'; 
+                app2_marksheetBackgroundPreview.src = '#';
+            }
+        });
+        app2_backToReviewDataFromExamDetailsBtn.addEventListener('click', () => {
+            populateReviewStudentDataUI_App2(); 
+            showScreen_App2('reviewStudentDataScreen');
+        });
+        app2_nextToSubjectConfigBtn.addEventListener('click', () => {
+            examDetails_App2 = {
+                type: app2_examTypeInput.value.trim(),
+                name: app2_examNameInput.value.trim(),
+                generalClass: app2_generalClassNameInput.value.trim(),
+                schoolName: app2_schoolNameInput.value.trim(),
+                schoolAddress: app2_schoolAddressInput.value.trim(),
+            };
+            if (!examDetails_App2.type || !examDetails_App2.name || !examDetails_App2.schoolName) { alert('App2: Fill all exam/school details.'); return; }
+            if (subjectsConfig_App2.length === 0) addSubjectRow_App2();
+            showScreen_App2('subjectConfigScreen');
+        });
+
+        function addSubjectRow_App2(name = '', totalMarks = 100, passMarks = 33) { 
+            const subjectId = `app2-subject-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const subjectDiv = document.createElement('div');
+            subjectDiv.classList.add('subject-item'); // App2 specific or common
+            subjectDiv.setAttribute('data-id', subjectId);
+            subjectDiv.innerHTML = `
+                <input type="text" class="subject-name" placeholder="Subject Name" value="${name}" style="flex-grow: 2;">
+                <input type="number" class="total-marks" placeholder="Total Marks" value="${totalMarks}" style="width: 120px;">
+                <input type="number" class="pass-marks" placeholder="Pass Marks" value="${passMarks}" style="width: 120px;">
+                <button class="danger remove-subject-btn">Remove</button>
+            `;
+            app2_subjectListDiv.appendChild(subjectDiv);
+            subjectDiv.querySelector('.remove-subject-btn').addEventListener('click', () => {
+                subjectDiv.remove();
+                updateSubjectsConfig_App2();
+            });
+        }
+        function updateSubjectsConfig_App2() { 
+            subjectsConfig_App2 = [];
+            appRoot.querySelectorAll('#app2_subjectList .subject-item').forEach(item => { // Query within App2 root
+                const name = item.querySelector('.subject-name').value.trim();
+                const totalMarks = parseInt(item.querySelector('.total-marks').value);
+                const passMarks = parseInt(item.querySelector('.pass-marks').value);
+                if (name && !isNaN(totalMarks) && !isNaN(passMarks)) { subjectsConfig_App2.push({ name, totalMarks, passMarks }); }
+            });
+        }
+        app2_addSubjectBtn.addEventListener('click', () => addSubjectRow_App2());
+        app2_backToExamDetailsBtn.addEventListener('click', () => showScreen_App2('examDetailsScreen'));
+        app2_nextToMarksEntryBtn.addEventListener('click', () => {
+            updateSubjectsConfig_App2();
+            if (subjectsConfig_App2.length === 0) { alert('App2: Add at least one subject.'); return; }
+            populateStudentListForMarksEntry_App2();
+            if (studentsData.length > 0) loadMarksFormForStudent_App2(0);
+            showScreen_App2('marksEntryScreen');
+        });
+        
+        function populateStudentListForMarksEntry_App2() { 
+            app2_studentListContainer.innerHTML = '';
+            studentsData.forEach((student, index) => {
+                const studentItem = document.createElement('div');
+                studentItem.classList.add('student-list-item'); // App2 specific or common
+                studentItem.textContent = `${student.RollNumber || 'N/A'} - ${student.Name || 'Unnamed Student'}`;
+                if(index === currentStudentIndexForMarks_App2) studentItem.classList.add('selected');
+                studentItem.addEventListener('click', () => loadMarksFormForStudent_App2(index));
+                app2_studentListContainer.appendChild(studentItem);
+            });
+        }
+        function loadMarksFormForStudent_App2(index) { 
+            if (index < 0 || index >= studentsData.length) return;
+            currentStudentIndexForMarks_App2 = index;
+            const student = studentsData[index];
+            app2_currentStudentNameSpan.textContent = `${student.Name || 'Unnamed Student'} (Roll: ${student.RollNumber || 'N/A'})`;
+            app2_marksInputFormDiv.innerHTML = '';
+            subjectsConfig_App2.forEach(subject => {
+                const marksObtained = student.marks[subject.name] !== undefined ? student.marks[subject.name] : '';
+                const inputGroup = document.createElement('div');
+                inputGroup.classList.add('student-marks-item'); // App2 specific or common
+                inputGroup.innerHTML = `
+                    <label for="app2-marks-${subject.name.replace(/\s+/g, '-')}" style="width: 180px; margin-bottom:0; font-weight:normal;">${subject.name}:</label>
+                    <input type="number" id="app2-marks-${subject.name.replace(/\s+/g, '-')}"
+                           data-subject="${subject.name}"
+                           placeholder="Marks (0-${subject.totalMarks})"
+                           min="0" max="${subject.totalMarks}" value="${marksObtained}" style="flex-grow:1;">
+                    <span style="font-size:0.9em; color:#555;">Max: ${subject.totalMarks} | Pass: ${subject.passMarks}</span>`;
+                app2_marksInputFormDiv.appendChild(inputGroup);
+            });
+            appRoot.querySelectorAll('#app2_studentListContainer .student-list-item').forEach((item, idx) => { // Query within App2 root
+                item.classList.toggle('selected', idx === currentStudentIndexForMarks_App2);
+            });
+        }
+        function saveCurrentStudentMarks_App2() { 
+            if (currentStudentIndexForMarks_App2 === -1) return false;
+            const student = studentsData[currentStudentIndexForMarks_App2];
+            let allValid = true;
+            appRoot.querySelector('#app2_marksInputForm').querySelectorAll('input[type="number"]').forEach(input => { // Query within App2 root
+                const subjectName = input.dataset.subject;
+                const subjectConfig = subjectsConfig_App2.find(s => s.name === subjectName);
+                const value = input.value.trim();
+                if (value === '') { student.marks[subjectName] = null; } 
+                else {
+                    const marks = parseInt(value);
+                    if (!subjectConfig || isNaN(marks) || marks < 0 || marks > subjectConfig.totalMarks) {
+                        alert(`App2: Invalid marks for ${subjectName}. Must be 0-${subjectConfig?.totalMarks || 'N/A'}.`);
+                        input.style.borderColor = 'red'; allValid = false;
+                    } else { student.marks[subjectName] = marks; input.style.borderColor = ''; }
+                }
+            });
+            return allValid;
+        }
+        app2_saveMarksBtn.addEventListener('click', () => {
+            if(saveCurrentStudentMarks_App2()){ alert('App2: Marks saved for ' + studentsData[currentStudentIndexForMarks_App2].Name); }
+        });
+        app2_saveAndNextStudentBtn.addEventListener('click', () => { 
+            if (saveCurrentStudentMarks_App2()) {
+                if (currentStudentIndexForMarks_App2 < studentsData.length - 1) {
+                    loadMarksFormForStudent_App2(currentStudentIndexForMarks_App2 + 1);
+                } else {
+                    alert('App2: All students processed. Proceed to display/convert marksheets.');
+                    app2_nextToConversionAndDownloadBtn.focus();
+                }
+            }
+        });
+        app2_backToSubjectConfigBtn.addEventListener('click', () => { updateSubjectsConfig_App2(); showScreen_App2('subjectConfigScreen'); });
+        
+        app2_nextToConversionAndDownloadBtn.addEventListener('click', () => {
+            if (currentStudentIndexForMarks_App2 !== -1 && app2_marksInputFormDiv.innerHTML.trim() !== '') {
+                 if (app2_marksInputFormDiv.querySelectorAll('input[type="number"]').length > 0 && !saveCurrentStudentMarks_App2()) { // Save pending marks
+                     alert("App2: Please correct or save current student's marks before proceeding."); return;
+                }
+            }
+            // Initial population of displayed marksheets (optional here, can be tied to explicit button)
+            // displayAllMarkSheetsForConversion_App2(); // Or not, make user click a button on next screen
+            showScreen_App2('marksheetConversionAndDownloadScreen');
+            // Reset buttons and previews on this screen
+            app2_allMarkSheetsDisplayWrapper.style.display = 'none';
+            app2_imagePreviewContainerWrapper.style.display = 'none';
+            app2_downloadPDFFromImagesBtn.disabled = true;
+        });
+
+        app2_displayAllMarkSheetsBtn.addEventListener('click', () => displayAllMarkSheetsForConversion_App2());
+
+        function displayAllMarkSheetsForConversion_App2() {
+            if (studentsData.length === 0) {
+                alert("App2: No students to display marksheets for.");
+                app2_allMarkSheetsDisplayContainer.innerHTML = "<p>No student data.</p>";
+                app2_allMarkSheetsDisplayWrapper.style.display = 'block';
+                return;
+            }
+            showGlobalLoading("App2: Rendering all marksheets for display...");
+            app2_allMarkSheetsDisplayContainer.innerHTML = ''; // Clear previous
+            app2_imagePreviewContainer.innerHTML = ''; // Clear old images from previous conversion
+            app2_generatedImageDataUrls = []; // Reset for new conversion
+            app2_downloadPDFFromImagesBtn.disabled = true;
+
+
+            studentsData.forEach((student, index) => {
+                const uniqueSuffix = `app2-${student.StudentID || index}`;
+                const html = renderMarksheetHTML_App2(student, examDetails_App2, subjectsConfig_App2, schoolLogoBase64_App2, app2_marksheetBackgroundImageDataUrl, uniqueSuffix);
+                app2_allMarkSheetsDisplayContainer.innerHTML += html;
+            });
+             // After all HTML is in DOM, generate QR codes
+            setTimeout(() => {
+                app2_allMarkSheetsDisplayContainer.querySelectorAll('.app2-marksheet-render-wrapper').forEach((marksheetDiv, index) => {
+                    const studentForQR = studentsData[index]; // Use studentsData here
+                    const qrId = marksheetDiv.dataset.qrId;
+                    const qrPlaceholderElement = marksheetDiv.querySelector(`#${qrId}`);
+
+                    if (qrPlaceholderElement && studentForQR) {
+                        const calcs = getStudentCalculatedData_App2(studentForQR); // Calculate for QR
+                        const qrData = { SID: studentForQR.StudentID, N: studentForQR.Name, R: studentForQR.RollNumber, C: studentForQR.Class || examDetails_App2.generalClass, E: examDetails_App2.name, TM: calcs.totalMarksObtained, P: calcs.percentage + '%', Res: calcs.overallResult, Sch: examDetails_App2.schoolName };
+                        qrPlaceholderElement.innerHTML = ''; // Clear previous QR
+                        try {
+                             new QRCode(qrPlaceholderElement, { text: JSON.stringify(qrData), width: 70, height: 70, colorDark : "#000",colorLight : "#fff", correctLevel : QRCode.CorrectLevel.M });
+                        } catch(qrError) { console.error("App2 QR Error on display:", qrError, qrPlaceholderElement); }
+                    } else {
+                        console.warn(`App2: QR placeholder or student data missing for index ${index}, QR ID: ${qrId}`);
+                    }
+                });
+                app2_allMarkSheetsDisplayWrapper.style.display = 'block'; // Show the container with marksheets
+                hideGlobalLoading();
+            }, 300); // Delay for DOM updates and QR rendering
+        }
+        
+        function renderMarksheetHTML_App2(student, currentExamDetails, currentSubjectsConfig, schoolLogo, customBgDataUrl, uniqueSuffix) {
+            const calcs = getStudentCalculatedData_App2(student);
+            let subjectRows = '';
+            currentSubjectsConfig.forEach(subjectConf => {
+                const marks = student.marks[subjectConf.name];
+                const marksDisplay = (marks === null || marks === undefined) ? 'AB' : marks;
+                const result = (marks === null || marks === undefined || (typeof marks === 'number' && typeof subjectConf.passMarks === 'number' && marks < subjectConf.passMarks)) ? 'FAIL' : 'PASS';
+                subjectRows += `<tr><td>${subjectConf.name}</td><td style="text-align:center;">${subjectConf.totalMarks || 'N/A'}</td><td style="text-align:center;">${subjectConf.passMarks || 'N/A'}</td><td style="text-align:center;">${marksDisplay}</td><td style="text-align:center;">${(marks === null || marks === undefined) ? '-' : result}</td></tr>`;
+            });
+
+            const qrPlaceholderId = `qrPlaceholder-${uniqueSuffix}`;
+            const backgroundStyle = customBgDataUrl ? `background-image: url(${customBgDataUrl});` : '';
+
+            return `
+                <div class="app2-marksheet-render-wrapper" style="${backgroundStyle}" data-qr-id="${qrPlaceholderId}">
+                    <div class="app2-marksheet-content-overlay">
+                        <div class="marksheet-header">
+                            ${schoolLogo ? `<img src="${schoolLogo}" alt="School Logo">` : ''}
+                            <h1>${currentExamDetails.schoolName || 'School Name'}</h1><p>${currentExamDetails.schoolAddress || 'School Address'}</p>
+                            <h2>${currentExamDetails.type || 'Examination'} - ${currentExamDetails.name || 'Session'}</h2><h3>Progress Report</h3>
+                        </div>
+                        <div class="qr-code-container" id="${qrPlaceholderId}"></div>
+                        <div class="student-info-section">
+                            <div class="student-info-col">
+                                <table class="student-info-table">
+                                    <tr><td>Student ID:</td><td>${student.StudentID || 'N/A'}</td></tr>
+                                    <tr><td>Name:</td><td>${student.Name || 'N/A'}</td></tr>
+                                    <tr><td>Father's Name:</td><td>${student.FatherName || 'N/A'}</td></tr>
+                                    <tr><td>Mother's Name:</td><td>${student.MotherName || 'N/A'}</td></tr>
+                                    <tr><td>Gender:</td><td>${student.Gender || 'N/A'}</td></tr>
+                                </table>
+                            </div>
+                            <div class="student-info-col">
+                                <table class="student-info-table">
+                                    <tr><td>Roll Number:</td><td>${student.RollNumber || 'N/A'}</td></tr>
+                                    <tr><td>Class:</td><td>${student.Class || currentExamDetails.generalClass || 'N/A'}</td></tr>
+                                    <tr><td>Aadhar:</td><td>${student.Aadhar || 'N/A'}</td></tr>
+                                    <tr><td>Mobile:</td><td>${student.Mobile || 'N/A'}</td></tr>
+                                    <tr><td>Reg. Date:</td><td>${student.RegistrationDate || 'N/A'}</td></tr>
+                                </table>
+                            </div>
+                        </div>
+                        <table class="marksheet">
+                            <thead><tr><th>Subject</th><th style="text-align:center;">Max Marks</th><th style="text-align:center;">Pass Marks</th><th style="text-align:center;">Marks Obtained</th><th style="text-align:center;">Result</th></tr></thead>
+                            <tbody>${subjectRows}</tbody>
+                            <tfoot>
+                                <tr><th colspan="3" style="text-align:right;">Total Marks:</th><th style="text-align:center;">${calcs.totalMarksObtained} / ${calcs.totalMaximumMarks}</th><th></th></tr>
+                                <tr><th colspan="3" style="text-align:right;">Percentage:</th><th style="text-align:center;">${calcs.percentage}%</th><th></th></tr>
+                                <tr><th colspan="3" style="text-align:right;">Overall Result:</th><th colspan="2" style="text-align:center; font-weight:bold;">${calcs.overallResult}</th></tr>
+                            </tfoot>
+                        </table>
+                        <div class="marksheet-footer"><span>Date: ${new Date().toLocaleDateString('en-GB')}</span><span>Class Teacher</span><span>Principal</span></div>
+                    </div>
+                </div>`;
+        }
+
+        function getStudentCalculatedData_App2(student) { 
+            let totalMarksObtained = 0, totalMaximumMarks = 0, overallResult = 'PASS';
+            subjectsConfig_App2.forEach(subjectConf => {
+                const marks = student.marks[subjectConf.name];
+                if (marks !== null && marks !== undefined && typeof marks === 'number') {
+                    totalMarksObtained += marks;
+                    if (typeof subjectConf.passMarks === 'number' && marks < subjectConf.passMarks) overallResult = 'FAIL';
+                } else { 
+                    overallResult = 'FAIL'; 
+                }
+                if (subjectConf.totalMarks && typeof subjectConf.totalMarks === 'number') totalMaximumMarks += subjectConf.totalMarks;
+            });
+            if (overallResult === 'PASS') {
+                for (const subjectConf of subjectsConfig_App2) {
+                    const marks = student.marks[subjectConf.name];
+                    if (marks === null || marks === undefined) { overallResult = 'FAIL'; break; }
+                    if (typeof marks === 'number' && typeof subjectConf.passMarks === 'number' && marks < subjectConf.passMarks) { overallResult = 'FAIL'; break; }
+                }
+            }
+            const percentage = totalMaximumMarks > 0 ? ((totalMarksObtained / totalMaximumMarks) * 100).toFixed(2) : "0.00";
+            return { totalMarksObtained, totalMaximumMarks, percentage, overallResult };
+        }
+
+        app2_convertToImagesBtn.addEventListener('click', async () => {
+            const marksheetElements = app2_allMarkSheetsDisplayContainer.querySelectorAll('.app2-marksheet-render-wrapper');
+            if (marksheetElements.length === 0) {
+                alert("App2: No marksheets displayed to convert. Click 'Display All Marksheets' first."); return;
+            }
+            showGlobalLoading("App2: Converting marksheets to images...");
+            app2_imagePreviewContainer.innerHTML = ''; 
+            app2_generatedImageDataUrls = []; 
+            app2_imagePreviewContainerWrapper.style.display = 'block';
+
+            for (let i = 0; i < marksheetElements.length; i++) {
+                const element = marksheetElements[i];
+                try {
+                    const canvas = await html2canvas(element, {
+                        scale: 1.5, useCORS: true, logging: false,
+                        backgroundColor: null, // Make background transparent if customBgDataUrl is used for actual element bg
+                        width: element.offsetWidth, height: element.offsetHeight,
+                        windowWidth: element.scrollWidth, windowHeight: element.scrollHeight
+                    });
+                    const imgDataUrl = canvas.toDataURL('image/png');
+                    app2_generatedImageDataUrls.push(imgDataUrl);
+                    const imgElement = document.createElement('img');
+                    imgElement.src = imgDataUrl;
+                    app2_imagePreviewContainer.appendChild(imgElement);
+                } catch (error) {
+                    console.error("App2: Error converting marksheet to image:", error, element);
+                    alert("App2: Error converting one or more marksheets to image. Check console.");
+                }
+            }
+            hideGlobalLoading();
+            if (app2_generatedImageDataUrls.length > 0) {
+                app2_downloadPDFFromImagesBtn.disabled = false;
+                alert(`App2: ${app2_generatedImageDataUrls.length} marksheets converted to images.`);
+            } else {
+                alert("App2: No images were generated.");
+            }
+        });
+
+        app2_downloadPDFFromImagesBtn.addEventListener('click', async () => {
+            if (app2_generatedImageDataUrls.length === 0) {
+                alert("App2: No images available to create PDF. Convert marksheets to images first."); return;
+            }
+            showGlobalLoading("App2: Creating PDF from images...");
+            
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            const A4_PAGE_WIDTH_MM = 210; const A4_PAGE_HEIGHT_MM = 297;
+            const MARGIN_MM = 10; // Adjust as needed, or use 0 if images are full A4
+            const contentWidthMm = A4_PAGE_WIDTH_MM - (2 * MARGIN_MM);
+            const contentHeightMm = A4_PAGE_HEIGHT_MM - (2 * MARGIN_MM);
+
+            for (let i = 0; i < app2_generatedImageDataUrls.length; i++) {
+                if (i > 0) pdf.addPage();
+                const imgDataUrl = app2_generatedImageDataUrls[i];
+                try {
+                    // Using App1's getImageDimensions function as it's generic
+                    const dimensions = await getImageDimensions_App1(imgDataUrl); 
+                    let imgWidthInPdf = contentWidthMm;
+                    let imgHeightInPdf = contentWidthMm / (dimensions.width / dimensions.height);
+                    if (imgHeightInPdf > contentHeightMm) { // If too tall, fit to height
+                        imgHeightInPdf = contentHeightMm;
+                        imgWidthInPdf = contentHeightMm * (dimensions.width / dimensions.height);
+                    }
+                     // Center image
+                    const xOffset = MARGIN_MM + (contentWidthMm - imgWidthInPdf) / 2;
+                    const yOffset = MARGIN_MM;
+                    pdf.addImage(imgDataUrl, 'PNG', xOffset, yOffset, imgWidthInPdf, imgHeightInPdf);
+                } catch (e) {
+                     console.error("App2: Error adding image to PDF:", e);
+                     // Fallback: attempt to add with fixed A4 content dimensions
+                     pdf.addImage(imgDataUrl, 'PNG', MARGIN_MM, MARGIN_MM, contentWidthMm, contentHeightMm);
+                }
+            }
+            pdf.save(`All_Marksheets_${(examDetails_App2.schoolName || "School").replace(/\s+/g, '_')}_App2.pdf`);
+            hideGlobalLoading();
+        });
+
+        app2_backToMarksEntryBtn.addEventListener('click', () => { 
+            populateStudentListForMarksEntry_App2();
+            if (currentStudentIndexForMarks_App2 !== -1 && studentsData.length > 0) loadMarksFormForStudent_App2(currentStudentIndexForMarks_App2);
+            else if (studentsData.length > 0) loadMarksFormForStudent_App2(0);
+            else { app2_currentStudentNameSpan.textContent = ""; app2_marksInputFormDiv.innerHTML = "<p>No students (App2).</p>"; }
+            showScreen_App2('marksEntryScreen');
+        });
+
+
+        // Data download buttons (JSON, XLSX) - Kept for utility, not directly related to PDF changes
+        appRoot.querySelector('#dataDownloadButtons button#downloadAllDataJsonBtn')?.addEventListener('click', () => { // Optional chaining if button removed
+            const dataToDownload = { examDetails: examDetails_App2, schoolLogoBase64: "Logo excluded", subjectsConfiguration: subjectsConfig_App2, students: studentsData.map(s => ({ ...s, ...getStudentCalculatedData_App2(s) })) };
+            const jsonString = JSON.stringify(dataToDownload, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `all_students_marks_data_App2.json`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            alert('App2: All data downloaded as JSON.');
+        });
+        appRoot.querySelector('#dataDownloadButtons button#downloadAllDataXlsxBtn')?.addEventListener('click', () => { // Optional chaining
+            const dataForExcelSheet = studentsData.map(student => {
+                const studentRow = {};
+                REQUIRED_APP_FIELDS_App2.forEach(field => { studentRow[field.label] = student[field.key] || ''; });
+                const calcs = getStudentCalculatedData_App2(student);
+                subjectsConfig_App2.forEach(subjectConf => {
+                    const marks = student.marks[subjectConf.name];
+                    studentRow[`${subjectConf.name} (Marks)`] = (marks === null || marks === undefined) ? 'AB' : marks;
+                });
+                Object.assign(studentRow, {
+                    'Total Marks Obtained': calcs.totalMarksObtained, 'Total Maximum Marks': calcs.totalMaximumMarks,
+                    'Percentage (%)': calcs.percentage, 'Overall Result': calcs.overallResult
+                }); return studentRow;
+            });
+            const mainSheet = XLSX.utils.json_to_sheet(dataForExcelSheet);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, mainSheet, "Students Marks Data");
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([examDetails_App2]), "Exam Details");
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(subjectsConfig_App2), "Subjects Config");
+            XLSX.writeFile(workbook, `all_students_marks_output_App2.xlsx`);
+            alert('App2: All data downloaded as XLSX.');
+        });
+        appRoot.querySelector('#dataDownloadButtons button#printMarksheetBtn')?.addEventListener('click', () => {
+             alert("App2: Print current marksheet from displayed list. This button's function might be best if tied to a single selected marksheet if a selection mechanism is re-added. For now, it will trigger system print for the whole page.");
+             window.print();
+        });
+
+
+    })();
+
+    // --- App 3: Student Data Extractor & Reformatter ---
+    (function() {
+        const appRoot = document.getElementById('app3');
+        if (!appRoot) return;
+
+        const STANDARD_FIELDS_CONFIG_App3 = [
+            { key: 'StudentID', label: 'Student ID' }, { key: 'FullName', label: 'Full Name' },
+            { key: 'RollNumber', label: 'Roll Number' }, { key: 'Class', label: 'Class / Grade' },
+            { key: 'Section', label: 'Section' }, { key: 'DateOfBirth', label: 'Date of Birth' },
+            { key: 'Gender', label: 'Gender' }, { key: 'FatherName', label: "Father's Name" },
+            { key: 'MotherName', label: "Mother's Name" }, { key: 'ContactNumber', label: 'Contact Number' },
+            { key: 'AlternateContact', label: 'Alternate Contact' }, { key: 'EmailID', label: 'Email ID' },
+            { key: 'Address', label: 'Full Address' }, { key: 'City', label: 'City' },
+            { key: 'State', label: 'State' }, { key: 'PinCode', label: 'Pin Code' },
+            { key: 'AdmissionDate', label: 'Admission Date' }, { key: 'AadharNumber', label: 'Aadhar Number' }
+        ];
+
+        let uploadedJsonData_App3 = []; // Prefixed
+        let uploadedHeaders_App3 = []; // Prefixed
+
+        const xlsxFileInput_App3 = appRoot.querySelector('#app3_xlsxFile');
+        const mappingSectionDiv_App3 = appRoot.querySelector('#app3_mappingSection');
+        const standardFieldsMappingContainer_App3 = appRoot.querySelector('#app3_standardFieldsMappingContainer');
+        const extraColumnsSelect_App3 = appRoot.querySelector('#app3_extraColumnsSelect');
+        const processAndDownloadBtn_App3 = appRoot.querySelector('#app3_processAndDownloadBtn');
+
+        xlsxFileInput_App3.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) {
+                mappingSectionDiv_App3.style.display = 'none';
+                processAndDownloadBtn_App3.disabled = true;
+                return;
+            }
+            showGlobalLoading("App3: Processing Excel...");
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const headerRow = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" })[0];
+                    uploadedHeaders_App3 = headerRow ? headerRow.map(String) : [];
+                    uploadedJsonData_App3 = XLSX.utils.sheet_to_json(worksheet, { defval: "", raw: false, dateNF: 'yyyy-mm-dd' });
+
+                    if (uploadedHeaders_App3.length === 0 || uploadedJsonData_App3.length === 0) {
+                        alert("App3: The selected Excel file appears to be empty or lacks a valid header row.");
+                        mappingSectionDiv_App3.style.display = 'none';
+                        processAndDownloadBtn_App3.disabled = true;
+                    } else {
+                        populateMappingUI_App3();
+                        mappingSectionDiv_App3.style.display = 'block';
+                        processAndDownloadBtn_App3.disabled = false;
+                    }
+                } catch (error) {
+                    console.error("App3: Error processing XLSX file:", error);
+                    alert("App3: Error processing XLSX file. Ensure it's valid.\n" + error.message);
+                    mappingSectionDiv_App3.style.display = 'none';
+                    processAndDownloadBtn_App3.disabled = true;
+                } finally {
+                    hideGlobalLoading();
+                }
+            };
+            reader.onerror = (error) => {
+                console.error("App3: File reading error:", error);
+                alert("App3: Could not read the file.");
+                processAndDownloadBtn_App3.disabled = true;
+                hideGlobalLoading();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function populateMappingUI_App3() {
+            standardFieldsMappingContainer_App3.innerHTML = '';
+            extraColumnsSelect_App3.innerHTML = '';
+            const notAvailableOption = `<option value="">--- Not Available ---</option>`;
+            const headerOptions = uploadedHeaders_App3.map(header => `<option value="${header}">${header}</option>`).join('');
+
+            STANDARD_FIELDS_CONFIG_App3.forEach(field => {
+                const itemDiv = document.createElement('div'); itemDiv.classList.add('mapping-item');
+                const label = document.createElement('label');
+                label.htmlFor = `app3-map-${field.key}`; label.textContent = `${field.label}:`;
+                const select = document.createElement('select');
+                select.id = `app3-map-${field.key}`; select.dataset.fieldKey = field.key;
+                select.innerHTML = notAvailableOption + headerOptions;
+                const autoSelectedHeader = uploadedHeaders_App3.find(h =>
+                    h.toLowerCase().replace(/[\s\W_]/g, '') === field.label.toLowerCase().replace(/[\s\W_]/g, '') ||
+                    h.toLowerCase().replace(/[\s\W_]/g, '') === field.key.toLowerCase().replace(/[\s\W_]/g, '')
+                );
+                if (autoSelectedHeader) select.value = autoSelectedHeader;
+                itemDiv.appendChild(label); itemDiv.appendChild(select);
+                standardFieldsMappingContainer_App3.appendChild(itemDiv);
+            });
+            uploadedHeaders_App3.forEach(header => {
+                const option = document.createElement('option');
+                option.value = header; option.textContent = header;
+                extraColumnsSelect_App3.appendChild(option);
+            });
+        }
+
+        processAndDownloadBtn_App3.addEventListener('click', () => {
+            if (uploadedJsonData_App3.length === 0) {
+                alert("App3: No data loaded from XLSX. Please upload a file first."); return;
+            }
+            showGlobalLoading("App3: Processing and downloading...");
+            const standardFieldMapping_App3 = {}; // Prefixed
+            appRoot.querySelectorAll('#app3_standardFieldsMappingContainer select').forEach(select => { // Query within App3 root
+                if (select.value) standardFieldMapping_App3[select.dataset.fieldKey] = select.value;
+            });
+            const selectedExtraHeaders_App3 = Array.from(extraColumnsSelect_App3.selectedOptions).map(option => option.value); // Prefixed
+            const outputData_App3 = []; // Prefixed
+
+            uploadedJsonData_App3.forEach(inputRow => {
+                const newOutputRow = {};
+                STANDARD_FIELDS_CONFIG_App3.forEach(fieldConfig => {
+                    const mappedHeader = standardFieldMapping_App3[fieldConfig.key];
+                    newOutputRow[fieldConfig.label] = (mappedHeader && inputRow.hasOwnProperty(mappedHeader)) ? inputRow[mappedHeader] : "";
+                });
+                selectedExtraHeaders_App3.forEach(extraHeader => {
+                    newOutputRow[extraHeader] = inputRow.hasOwnProperty(extraHeader) ? inputRow[extraHeader] : "";
+                });
+                outputData_App3.push(newOutputRow);
+            });
+
+            if (outputData_App3.length === 0) {
+                alert("App3: No data was processed to output. Check mappings.");
+                hideGlobalLoading(); return;
+            }
+            const newWorksheet = XLSX.utils.json_to_sheet(outputData_App3);
+            const newWorkbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, "Processed Student Data");
+            try {
+                XLSX.writeFile(newWorkbook, "Reformatted_Student_Data_App3.xlsx");
+            } catch (error) {
+                console.error("App3: Error writing XLSX file:", error);
+                alert("App3: Error generating the new XLSX file. Check console.");
+            } finally {
+                hideGlobalLoading();
+            }
+        });
+    })();
+</script>
+
+</body>
+</html>
