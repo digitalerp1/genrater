@@ -1,1 +1,666 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Marksheet Generator</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600&display=swap');
+
+        body {
+            font-family: 'Open Sans', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #eef2f7;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .controls-container {
+            background-color: #fff;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-weight: 600;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .controls-container input[type="file"] {
+            border: 1px solid #ddd;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            width: 250px;
+        }
+        
+        .controls-container button, .action-buttons button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 22px;
+            font-size: 1em;
+            font-family: 'Roboto', sans-serif;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .controls-container button:hover, .action-buttons button:hover {
+            background-color: #0056b3;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .controls-container button.secondary, .action-buttons button.secondary {
+            background-color: #6c757d;
+        }
+        .controls-container button.secondary:hover, .action-buttons button.secondary:hover {
+            background-color: #545b62;
+        }
+         .action-buttons button.download-image {
+            background-color: #28a745; /* Green */
+        }
+        .action-buttons button.download-image:hover {
+            background-color: #1e7e34;
+        }
+        .action-buttons button.download-pdf {
+            background-color: #dc3545; /* Red */
+        }
+        .action-buttons button.download-pdf:hover {
+            background-color: #b02a37;
+        }
+
+        #statusMessage {
+            width: 100%;
+            text-align: center;
+            padding: 10px;
+            font-weight: 500;
+            font-family: 'Roboto', sans-serif;
+        }
+        #backgroundImagePreview {
+            font-style: italic;
+            font-size: 0.85em;
+            color: #007bff;
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .action-buttons {
+            display: none; /* Hidden initially */
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        #marksheetsContainer {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(700px, 1fr)); /* Adjust minmax for desired marksheet width */
+            gap: 25px;
+        }
+
+        .marksheet {
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+            padding: 25px; /* A4-like padding */
+            box-shadow: 0 6px 18px rgba(0,0,0,0.07);
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden; /* For background image */
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            font-family: 'Times New Roman', Times, serif; /* Classic marksheet font */
+            color: #000; /* Black text for marksheets */
+        }
+        
+        .marksheet-content { /* To ensure content is above background if z-index issues */
+            position: relative;
+            z-index: 1;
+            background-color: rgba(255, 255, 255, 0.85); /* Slight white overlay if background is too dark */
+            padding: 20px;
+            border-radius: 5px;
+        }
+
+        .ms-header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #003366; /* Dark blue accent */
+            padding-bottom: 15px;
+        }
+        .ms-header img.logo {
+            max-width: 100px;
+            max-height: 80px;
+            margin-bottom: 10px;
+        }
+        .ms-header h2 { /* School Name */
+            font-family: 'Roboto', sans-serif;
+            font-size: 1.8em;
+            color: #003366;
+            margin: 5px 0;
+            font-weight: 700;
+        }
+        .ms-header p { /* School Address/Tagline */
+            font-size: 0.9em;
+            color: #444;
+            margin: 3px 0;
+        }
+        .ms-header h3 { /* Result Title */
+            font-size: 1.4em;
+            color: #0056b3;
+            margin-top: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .student-info-grid {
+            display: grid;
+            grid-template-columns: 120px auto 100px; /* Photo, Details, QR */
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+            border-bottom: 1px dashed #ccc;
+            padding-bottom: 15px;
+        }
+        .ms-student-photo {
+            width: 110px;
+            height: 130px;
+            object-fit: cover;
+            border: 3px solid #003366;
+            border-radius: 6px;
+        }
+        .ms-student-details p {
+            margin: 3px 0;
+            font-size: 0.95em;
+        }
+        .ms-student-details strong {
+            display: inline-block;
+            min-width: 110px;
+            color: #333;
+        }
+        .ms-qr-code {
+            width: 90px;
+            height: 90px;
+            border: 1px solid #eee;
+            padding: 5px;
+        }
+        .ms-qr-code img, .ms-qr-code canvas {
+             width: 100% !important; height: 100% !important; object-fit: contain;
+        }
+        
+        .ms-subjects-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+        .ms-subjects-table th, .ms-subjects-table td {
+            border: 1px solid #999; /* Darker border for marksheet table */
+            padding: 8px;
+            text-align: center;
+        }
+        .ms-subjects-table th {
+            background-color: #e0e8f0; /* Light blueish gray */
+            font-weight: bold;
+            color: #003366;
+        }
+        .ms-subjects-table td:first-child { text-align: left; } /* Subject name align left */
+
+        .ms-summary {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0f5fa;
+            border-radius: 6px;
+            border: 1px solid #d0e0f0;
+        }
+        .ms-summary h4 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            color: #003366;
+            font-family: 'Roboto', sans-serif;
+        }
+        .ms-summary p {
+            margin: 5px 0;
+            font-size: 1em;
+            font-weight: 500;
+        }
+        .ms-summary p span {
+            font-weight: bold;
+            color: #0056b3;
+        }
+        .pass { color: green !important; font-weight: bold; }
+        .fail { color: red !important; font-weight: bold; }
+
+        .ms-footer {
+            margin-top: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9em;
+            padding-top: 15px;
+            border-top: 1px solid #ccc;
+        }
+        .ms-footer p { margin: 0; }
+        .ms-footer .signature { text-align: center; }
+
+        @media print {
+            body { margin: 0; background-color: #fff; font-size: 10pt; }
+            .controls-container, .action-buttons, #statusMessageContainer { display: none !important; }
+            #marksheetsContainer { display: block; gap: 0;}
+            .marksheet {
+                box-shadow: none;
+                border: 1px solid #555;
+                margin: 0 auto 20px auto; /* Centered with bottom margin */
+                page-break-after: always;
+                width: 180mm; /* Approx A4 width with some margin */
+                min-height: 260mm; /* Approx A4 height */
+                padding: 15mm;
+                border-radius: 0;
+            }
+            .marksheet:last-child { page-break-after: auto; }
+            .marksheet-content { background-color: transparent; padding:0; } /* No overlay for print */
+            .ms-student-photo { width: 90px; height: 110px; }
+            .ms-qr-code { width: 70px; height: 70px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls-container">
+        <div class="control-group">
+            <label for="jsonFile">JSON डेटा फ़ाइल (.json):</label>
+            <input type="file" id="jsonFile" accept=".json">
+        </div>
+        <div class="control-group">
+            <label for="bgImageFile">पृष्ठभूमि छवि (वैकल्पिक):</label>
+            <input type="file" id="bgImageFile" accept="image/*">
+            <span id="backgroundImagePreview"></span>
+        </div>
+        <button onclick="generateMarkSheetsFromInputs()">मार्कशीट जेनरेट करें</button>
+    </div>
+
+    <div id="statusMessageContainer" style="text-align:center; margin-bottom:20px;">
+         <p id="statusMessage">कृपया फ़ाइलें अपलोड करें और मार्कशीट जेनरेट करें।</p>
+    </div>
+
+    <div class="action-buttons" id="actionButtons">
+        <button onclick="downloadAllAsImages()" class="download-image">सभी को इमेज के रूप में डाउनलोड करें (PNG)</button>
+        <button onclick="downloadAllAsPDF()" class="download-pdf">सभी को PDF के रूप में डाउनलोड करें</button>
+    </div>
+
+    <div id="marksheetsContainer">
+        </div>
+
+    <script>
+        let studentsData = null;
+        let backgroundImageURL = null;
+        const SCHOOL_LOGO_URL = "https://via.placeholder.com/100x80.png?text=School+Logo"; // Replace with your actual logo URL or leave for placeholder
+        const SCHOOL_NAME = "आपका विद्यालय का नाम"; // Replace with your school name
+        const SCHOOL_ADDRESS = "विद्यालय का पता, शहर, राज्य"; // Replace
+
+        document.getElementById('jsonFile').addEventListener('change', handleJsonFile);
+        document.getElementById('bgImageFile').addEventListener('change', handleBgImageFile);
+
+        function handleJsonFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        studentsData = JSON.parse(e.target.result);
+                        updateStatus(`JSON फ़ाइल '${file.name}' लोड हो गई।`, 'green');
+                    } catch (error) {
+                        studentsData = null;
+                        updateStatus(`JSON पार्स करने में त्रुटि: ${error.message}`, 'red');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        function handleBgImageFile(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    backgroundImageURL = e.target.result;
+                    document.getElementById('backgroundImagePreview').textContent = `पृष्ठभूमि: ${file.name}`;
+                    updateStatus(`पृष्ठभूमि छवि '${file.name}' लोड हो गई।`, 'green');
+                };
+                reader.readAsDataURL(file);
+            } else {
+                backgroundImageURL = null;
+                 document.getElementById('backgroundImagePreview').textContent = '';
+            }
+        }
+        
+        function updateStatus(message, color = 'black') {
+            const statusEl = document.getElementById('statusMessage');
+            statusEl.textContent = message;
+            statusEl.style.color = color;
+        }
+
+        function generateMarkSheetsFromInputs() {
+            if (!studentsData) {
+                updateStatus('कृपया पहले एक JSON डेटा फ़ाइल अपलोड करें।', 'red');
+                return;
+            }
+            updateStatus('मार्कशीट जेनरेट की जा रही हैं... कृपया प्रतीक्षा करें...', 'blue');
+            
+            // Ensure libraries are loaded
+            if (typeof html2canvas === 'undefined' || typeof jspdf === 'undefined') {
+                 updateStatus('आवश्यक लाइब्रेरी (html2canvas or jsPDF) लोड नहीं हो सकीं। कृपया अपनी इंटरनेट कनेक्टिविटी जांचें।', 'red');
+                 return;
+            }
+
+            const container = document.getElementById('marksheetsContainer');
+            container.innerHTML = ''; // Clear previous marksheets
+
+            if (!Array.isArray(studentsData) || studentsData.length === 0) {
+                updateStatus('JSON में कोई छात्र डेटा नहीं मिला या प्रारूप गलत है।', 'red');
+                document.getElementById('actionButtons').style.display = 'none';
+                return;
+            }
+            
+            studentsData.forEach((student, index) => {
+                const marksheetElement = createMarksheetHTML(student, index);
+                container.appendChild(marksheetElement);
+                generateQRCodeForStudent(student, `ms-qr-${index}`);
+            });
+            
+            updateStatus(`${studentsData.length} मार्कशीट सफलतापूर्वक जेनरेट की गईं।`, 'green');
+            document.getElementById('actionButtons').style.display = 'flex';
+        }
+
+        function calculateResults(student) {
+            const results = {
+                subjects: [],
+                totalObtained: 0,
+                totalMaxMarks: 0,
+                percentage: 0,
+                overallStatus: 'FAIL', // Default to FAIL
+                grade: 'N/A',
+                remarks: ''
+            };
+            const MAX_MARKS_PER_SUBJECT = 100; // Assumption
+            const PASS_PERCENT_PER_SUBJECT = 33;
+            const OVERALL_PASS_PERCENT = 33;
+            let allSubjectsPassed = true;
+
+            for (const key in student) {
+                if (key.endsWith('_Marks') && student.hasOwnProperty(key)) {
+                    const subjectName = key.substring(0, key.lastIndexOf('_Marks')).replace(/_/g, ' ');
+                    const obtainedMarks = parseFloat(student[key]);
+                    if (isNaN(obtainedMarks)) continue; // Skip if marks are not a number
+
+                    const subjectMaxMarks = MAX_MARKS_PER_SUBJECT; // Could be dynamic if JSON supplied SubjectName_MaxMarks
+                    const subjectPass = obtainedMarks >= (PASS_PERCENT_PER_SUBJECT / 100) * subjectMaxMarks;
+                    if (!subjectPass) allSubjectsPassed = false;
+
+                    results.subjects.push({
+                        name: subjectName,
+                        obtained: obtainedMarks.toFixed(1),
+                        max: subjectMaxMarks,
+                        status: subjectPass ? 'Pass' : 'Fail'
+                    });
+                    results.totalObtained += obtainedMarks;
+                    results.totalMaxMarks += subjectMaxMarks;
+                }
+            }
+
+            if (results.totalMaxMarks > 0) {
+                results.percentage = (results.totalObtained / results.totalMaxMarks) * 100;
+            }
+
+            if (allSubjectsPassed && results.percentage >= OVERALL_PASS_PERCENT) {
+                results.overallStatus = 'PASS';
+                if (results.percentage >= 75) results.grade = 'Distinction (विशेष योग्यता)';
+                else if (results.percentage >= 60) results.grade = 'First Division (प्रथम श्रेणी)';
+                else if (results.percentage >= 45) results.grade = 'Second Division (द्वितीय श्रेणी)';
+                else results.grade = 'Third Division (तृतीय श्रेणी)';
+                results.remarks = "Promoted (अगली कक्षा में प्रोन्नत)";
+            } else {
+                results.overallStatus = 'FAIL';
+                results.grade = 'Fail (अनुत्तीर्ण)';
+                results.remarks = "Needs Improvement (सुधार की आवश्यकता)";
+            }
+            return results;
+        }
+
+        function createMarksheetHTML(student, index) {
+            const calculated = calculateResults(student);
+            const marksheetDiv = document.createElement('div');
+            marksheetDiv.className = 'marksheet';
+            marksheetDiv.id = `marksheet-${index}`;
+            if (backgroundImageURL) {
+                marksheetDiv.style.backgroundImage = `url(${backgroundImageURL})`;
+            }
+
+            let subjectsHtml = '';
+            calculated.subjects.forEach(sub => {
+                subjectsHtml += `
+                    <tr>
+                        <td>${sub.name}</td>
+                        <td>${sub.max}</td>
+                        <td>${sub.obtained}</td>
+                        <td class="${sub.status.toLowerCase()}">${sub.status}</td>
+                    </tr>`;
+            });
+
+            marksheetDiv.innerHTML = `
+                <div class="marksheet-content"> 
+                    <div class="ms-header">
+                        <img src="${SCHOOL_LOGO_URL}" alt="School Logo" class="logo">
+                        <h2>${SCHOOL_NAME}</h2>
+                        <p>${SCHOOL_ADDRESS}</p>
+                        <h3>${student.ResultName || 'वार्षिक परीक्षा परिणाम'} - ${(new Date(student.Timestamp || Date.now())).getFullYear()}</h3>
+                    </div>
+
+                    <div class="student-info-grid">
+                        <img src="${student.PhotoURL || 'https://via.placeholder.com/110x130.png?text=No+Photo'}" alt="${student.Name}'s Photo" class="ms-student-photo" onerror="this.src='https://via.placeholder.com/110x130.png?text=Error';">
+                        <div class="ms-student-details">
+                            <p><strong>नाम:</strong> ${student.Name || 'N/A'}</p>
+                            <p><strong>रोल नंबर:</strong> ${student.RollNumber || 'N/A'}</p>
+                            <p><strong>कक्षा:</strong> ${student.ClassName || 'N/A'}</p>
+                            <p><strong>पिता का नाम:</strong> ${student.FatherName || 'N/A'}</p>
+                            <p><strong>माता का नाम:</strong> ${student.MotherName || 'N/A'}</p>
+                            <p><strong>जन्म तिथि (डेटा से):</strong> ${student.DOB || 'N/A'}</p> 
+                        </div>
+                        <div class="ms-qr-code" id="ms-qr-${index}"></div>
+                    </div>
+
+                    <h4>अंक विवरण:</h4>
+                    <table class="ms-subjects-table">
+                        <thead>
+                            <tr>
+                                <th>विषय</th>
+                                <th>अधिकतम अंक</th>
+                                <th>प्राप्तांक</th>
+                                <th>स्थिति</th>
+                            </tr>
+                        </thead>
+                        <tbody>${subjectsHtml}</tbody>
+                    </table>
+
+                    <div class="ms-summary">
+                        <h4>परिणाम सारांश:</h4>
+                        <p>कुल प्राप्तांक: <span>${calculated.totalObtained.toFixed(2)} / ${calculated.totalMaxMarks}</span></p>
+                        <p>प्रतिशत: <span>${calculated.percentage.toFixed(2)}%</span></p>
+                        <p>समग्र स्थिति: <span class="${calculated.overallStatus.toLowerCase()}">${calculated.overallStatus}</span></p>
+                        <p>श्रेणी/ग्रेड: <span>${calculated.grade}</span></p>
+                        <p>टिप्पणी: <span>${calculated.remarks}</span></p>
+                    </div>
+
+                    <div class="ms-footer">
+                        <p>जारी करने की तिथि: ${new Date().toLocaleDateString('hi-IN')}</p>
+                        <p class="signature">परीक्षा नियंत्रक के हस्ताक्षर</p>
+                    </div>
+                </div>
+            `;
+            return marksheetDiv;
+        }
+        
+        function generateQRCodeForStudent(student, elementId) {
+            const qrContainer = document.getElementById(elementId);
+            if (!qrContainer) return;
+            qrContainer.innerHTML = ''; // Clear previous QR if any
+
+            const qrData = {
+                ID: student.StudentID,
+                Name: student.Name,
+                Roll: student.RollNumber,
+                Class: student.ClassName,
+                Result: student.ResultName
+            };
+            try {
+                new QRCode(qrContainer, {
+                    text: JSON.stringify(qrData),
+                    width: 90, height: 90,
+                    colorDark : "#000000", colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
+                });
+            } catch (e) {
+                console.error("QR Code generation error: ", e);
+                qrContainer.textContent = "QR त्रुटि";
+            }
+        }
+
+        async function downloadMarkSheetAsImage(marksheetId, studentName) {
+            const element = document.getElementById(marksheetId);
+            if (!element) return;
+            
+            // Temporarily remove background from marksheet-content for cleaner capture if needed
+            const contentElement = element.querySelector('.marksheet-content');
+            const originalContentBg = contentElement.style.backgroundColor;
+            if (backgroundImageURL) { // If there's a main BG, make content overlay transparent for capture
+                 contentElement.style.backgroundColor = 'transparent';
+            }
+
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 2, // Higher scale for better quality
+                    useCORS: true, // If images are from other domains (like placeholder)
+                    backgroundColor: null, // Allow transparent background if element's bg is transparent
+                    onclone: (clonedDoc) => {
+                        // This is where you could modify the cloned document before rendering
+                        // For example, ensure fonts are loaded, etc.
+                        // If background of marksheet-content was made transparent, it applies to cloned too
+                    }
+                });
+                
+                // Restore background for display
+                contentElement.style.backgroundColor = originalContentBg;
+
+                const dataUrl = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.href = dataUrl;
+                link.download = `${studentName.replace(/\s+/g, '_')}_Marksheet.png`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (error) {
+                console.error('Error generating image for', studentName, error);
+                updateStatus(`'${studentName}' के लिए छवि जेनरेट करने में त्रुटि।`, 'red');
+                contentElement.style.backgroundColor = originalContentBg; // Restore on error
+            }
+        }
+
+        async function downloadAllAsImages() {
+            if (!studentsData || studentsData.length === 0) {
+                updateStatus('डाउनलोड करने के लिए कोई मार्कशीट नहीं है।', 'red');
+                return;
+            }
+            updateStatus('छवियाँ डाउनलोड की जा रही हैं...', 'blue');
+            for (let i = 0; i < studentsData.length; i++) {
+                const student = studentsData[i];
+                const marksheetId = `marksheet-${i}`;
+                await downloadMarkSheetAsImage(marksheetId, student.Name || `Student_${i+1}`);
+                // Small delay to help browsers manage multiple downloads if needed, though not always effective
+                if (i < studentsData.length - 1) await new Promise(resolve => setTimeout(resolve, 500)); 
+            }
+            updateStatus('सभी मार्कशीट छवियों का डाउनलोड प्रयास किया गया।', 'green');
+        }
+
+        async function downloadAllAsPDF() {
+            if (!studentsData || studentsData.length === 0) {
+                updateStatus('PDF बनाने के लिए कोई मार्कशीट नहीं है।', 'red');
+                return;
+            }
+            updateStatus('PDF जेनरेट की जा रही है... इसमें समय लग सकता है...', 'blue');
+            
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: 'p', // portrait
+                unit: 'mm',
+                format: 'a4'
+            });
+
+            const A4_WIDTH_MM = 210;
+            const A4_HEIGHT_MM = 297;
+            const MARGIN_MM = 10; // Margin for PDF page
+            const contentWidthMM = A4_WIDTH_MM - (2 * MARGIN_MM);
+            // const contentHeightMM = A4_HEIGHT_MM - (2 * MARGIN_MM); // Not strictly needed as image scales
+
+            for (let i = 0; i < studentsData.length; i++) {
+                const marksheetId = `marksheet-${i}`;
+                const element = document.getElementById(marksheetId);
+                if (!element) continue;
+
+                // Similar to image download, ensure content bg is transparent for capture if main bg exists
+                const contentElement = element.querySelector('.marksheet-content');
+                const originalContentBg = contentElement.style.backgroundColor;
+                if (backgroundImageURL) {
+                     contentElement.style.backgroundColor = 'transparent';
+                }
+                
+                try {
+                    const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: null });
+                    contentElement.style.backgroundColor = originalContentBg; // Restore
+                    
+                    const imgData = canvas.toDataURL('image/png');
+                    const imgProps = pdf.getImageProperties(imgData);
+                    const pdfImgWidth = contentWidthMM;
+                    const pdfImgHeight = (imgProps.height * pdfImgWidth) / imgProps.width;
+
+                    let currentHeight = pdfImgHeight;
+                    if (i > 0) { // Add new page for subsequent marksheets
+                         pdf.addPage();
+                    }
+                    pdf.addImage(imgData, 'PNG', MARGIN_MM, MARGIN_MM, pdfImgWidth, pdfImgHeight);
+
+                } catch (error) {
+                    console.error('Error processing marksheet for PDF:', error);
+                    contentElement.style.backgroundColor = originalContentBg; // Restore on error
+                    updateStatus(`मार्कशीट ${i+1} को PDF में जोड़ने में त्रुटि।`, 'red');
+                }
+            }
+            pdf.save('All_Markshseets.pdf');
+            updateStatus('सभी मार्कशीट की PDF सफलतापूर्वक जेनरेट और डाउनलोड की गई।', 'green');
+        }
+
+    </script>
+</body>
+</html>
